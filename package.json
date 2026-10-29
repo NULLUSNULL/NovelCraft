@@ -1,0 +1,95 @@
+{
+  "name": "novelcraft",
+  "version": "1.0.0",
+  "description": "Estudio literario integral para planificar, escribir y publicar novelas",
+  "main": "./out/main/index.js",
+  "author": "NovelCraft",
+  "license": "MIT",
+  "private": true,
+  "build": {
+    "appId": "com.novelcraft.app",
+    "productName": "NovelCraft",
+    "directories": {
+      "buildResources": "assets",
+      "output": "dist"
+    },
+    "files": ["out/**"],
+    "extraResources": [
+      {
+        "from": "assets/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "win": {
+      "icon": "icon.ico"
+    },
+    "mac": {
+      "icon": "icon.icns",
+      "category": "public.app-category.books"
+    },
+    "linux": {
+      "icon": "icons",
+      "category": "Office",
+      "target": ["AppImage", "deb"]
+    },
+    "nsis": {
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico"
+    }
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "build": "npm run typecheck && electron-vite build",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "package": "npm run build && electron-builder",
+    "package:linux": "npm run build && electron-builder --linux",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource-variable/newsreader": "^5.3.0",
+    "@tiptap/extension-character-count": "^3.32.0",
+    "@tiptap/extension-color": "^3.32.0",
+    "@tiptap/extension-font-family": "^3.32.0",
+    "@tiptap/extension-highlight": "^3.32.0",
+    "@tiptap/extension-link": "^3.32.0",
+    "@tiptap/extension-placeholder": "^3.32.0",
+    "@tiptap/extension-text-align": "^3.32.0",
+    "@tiptap/extension-text-style": "^3.32.0",
+    "@tiptap/extension-typography": "^3.32.0",
+    "@tiptap/extension-underline": "^3.32.0",
+    "@tiptap/pm": "^3.32.0",
+    "@tiptap/react": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
+    "@xyflow/react": "^12.12.0",
+    "adm-zip": "^0.5.16",
+    "immer": "^11.2.9",
+    "lucide-react": "^0.552.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "turndown": "^7.2.4",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/adm-zip": "^0.5.7",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/turndown": "^5.0.6",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.5",
+    "vitest": "^3.2.4"
+  }
+}
