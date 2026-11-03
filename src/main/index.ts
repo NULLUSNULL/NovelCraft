@@ -211,6 +211,13 @@ function createWindow(): void {
     }, 4000)
   })
 
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow?.webContents.send('window:fullscreen-change', true)
+  })
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow?.webContents.send('window:fullscreen-change', false)
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
     if (closeTimer) clearTimeout(closeTimer)

@@ -11,10 +11,11 @@ import {
   UserRound,
   X
 } from 'lucide-react'
-import type { DocumentNode } from '@shared/types'
+import type { ChapterKind, DocumentNode } from '@shared/types'
 import {
   formatNumber,
   getChapterScenes,
+  getChapterKind,
   getStatusLabel
 } from '@shared/project'
 import { useAppStore } from '../store/useAppStore'
@@ -199,6 +200,18 @@ function ChapterInspector({ node }: { node: DocumentNode }) {
   return (
     <div className="inspector-scroll">
       <InspectorSection title="Capítulo" icon={<BookOpen size={13} />}>
+        <Field label="Tipo de sección" hint="Determina cómo se numera al publicar">
+          <select
+            className="input"
+            value={getChapterKind(node)}
+            onChange={(event) => updateNode(node.id, { chapterKind: event.target.value as ChapterKind })}
+          >
+            <option value="chapter">Capítulo (numerado)</option>
+            <option value="prologue">Prólogo (sin numerar)</option>
+            <option value="epilogue">Epílogo (sin numerar)</option>
+            <option value="special">Sección especial (sin numerar)</option>
+          </select>
+        </Field>
         <Field label="Resumen">
           <textarea
             className="textarea sm"

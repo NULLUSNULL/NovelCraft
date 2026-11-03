@@ -6,6 +6,7 @@ export const ROOT_IDS = [MANUSCRIPT_ID, RESEARCH_ID] as const
 
 export type RootId = (typeof ROOT_IDS)[number]
 export type DocumentType = 'chapter' | 'scene' | 'note'
+export type ChapterKind = 'chapter' | 'prologue' | 'epilogue' | 'special'
 export type SceneStatus = 'idea' | 'outline' | 'draft' | 'revised' | 'final'
 export type PlotType = 'principal' | 'secundaria' | 'romance' | 'misterio' | 'conflicto' | 'tema'
 export type PlotStatus = 'latente' | 'activa' | 'resuelta' | 'abandonada'
@@ -42,6 +43,7 @@ export interface DocumentNode {
   wordGoal: number
   noteColor: string
   pinned: boolean
+  chapterKind?: ChapterKind
 }
 
 export interface Character {
@@ -376,6 +378,7 @@ export interface NovelCraftApi {
   setUiScale: (factor: number) => void
   maximizeWindow: () => Promise<boolean>
   closeWindow: () => Promise<void>
+  onFullscreenChange: (callback: (fullscreen: boolean) => void) => () => void
   setWindowDirty: (dirty: boolean) => void
   onBeforeClose: (callback: () => void) => () => void
   closeReady: () => void

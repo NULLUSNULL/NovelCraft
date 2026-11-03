@@ -38,6 +38,11 @@ const api: NovelCraftApi = {
   setUiScale: (factor: number) => webFrame.setZoomFactor(Math.min(2, Math.max(0.5, factor))),
   maximizeWindow: () => ipcRenderer.invoke('window:maximize'),
   closeWindow: () => ipcRenderer.invoke('window:close'),
+  onFullscreenChange: (callback: (fullscreen: boolean) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, fullscreen: boolean): void => callback(fullscreen)
+    ipcRenderer.on('window:fullscreen-change', listener)
+    return () => ipcRenderer.removeListener('window:fullscreen-change', listener)
+  },
   setWindowDirty: (dirty: boolean) => ipcRenderer.send('window:dirty', dirty),
   onBeforeClose: (callback: () => void) => {
     const listener = (): void => callback()

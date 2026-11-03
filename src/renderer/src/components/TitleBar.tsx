@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Check, Minus, Search, Square, X, CloudOff, Loader2 } from 'lucide-react'
 import { useAppStore } from '../store/useAppStore'
 import { AppIcon } from './AppIcon'
@@ -10,10 +10,15 @@ export function TitleBar() {
   const setProjectManagerOpen = useAppStore((state) => state.setProjectManagerOpen)
   const setCommandPaletteOpen = useAppStore((state) => state.setCommandPaletteOpen)
   const [maximized, setMaximized] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
   const isMac = appInfo?.platform === 'darwin'
 
+  useEffect(() => {
+    return window.novelcraft.onFullscreenChange(setFullscreen)
+  }, [])
+
   return (
-    <header className={`titlebar ${isMac ? 'platform-darwin' : ''}`}>
+    <header className={`titlebar ${isMac ? 'platform-darwin' : ''} ${fullscreen ? 'fullscreen' : ''}`}>
       <div className="titlebar-brand">
         <AppIcon className="brand-mark" />
         <span className="brand-name">NovelCraft</span>

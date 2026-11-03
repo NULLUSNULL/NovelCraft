@@ -397,6 +397,10 @@ button,
   padding-left: 82px;
 }
 
+.titlebar.platform-darwin.fullscreen {
+  padding-left: 14px;
+}
+
 .titlebar-brand {
   display: flex;
   align-items: center;

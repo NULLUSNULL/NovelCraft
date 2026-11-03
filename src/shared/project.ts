@@ -1,4 +1,5 @@
 import type {
+  ChapterKind,
   AiSettings,
   Character,
   CreateProjectInput,
@@ -145,6 +146,29 @@ export function getNoteChildren(project: Project): DocumentNode[] {
 
 export function getManuscriptChapters(project: Project): DocumentNode[] {
   return getRootChildren(project, MANUSCRIPT_ID)
+}
+
+export const CHAPTER_KIND_LABELS: Record<ChapterKind, string> = {
+  chapter: 'Capítulo',
+  prologue: 'Prólogo',
+  epilogue: 'Epílogo',
+  special: 'Sección sin numerar'
+}
+
+export function getChapterKind(node: DocumentNode): ChapterKind {
+  return node.chapterKind || 'chapter'
+}
+
+export function getChapterHeadings(chapters: DocumentNode[]): Array<{ label: string; numbered: boolean }> {
+  let counter = 0
+  return chapters.map((chapter) => {
+    const kind = getChapterKind(chapter)
+    if (kind === 'chapter') {
+      counter += 1
+      return { label: `Capítulo ${counter}`, numbered: true }
+    }
+    return { label: kind === 'special' ? '' : CHAPTER_KIND_LABELS[kind], numbered: false }
+  })
 }
 
 export function getManuscriptScenes(project: Project): DocumentNode[] {

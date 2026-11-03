@@ -16,6 +16,7 @@ import TurndownService from 'turndown'
 import type { DocumentNode, ManuscriptFormat } from '@shared/types'
 import {
   countWords,
+  getChapterHeadings,
   formatNumber,
   getManuscriptChapters,
   getManuscriptScenes,
@@ -56,6 +57,11 @@ function sanitizeContent(html: string): string {
   return doc.body.innerHTML
 }
 
+function headingParts(label: string, title: string): { kicker: string; title: string } {
+  const sameAsLabel = label && title.trim().toLowerCase() === label.toLowerCase()
+  return { kicker: label, title: sameAsLabel ? '' : title }
+}
+
 function buildMarkdown(
   title: string,
   author: string,
@@ -81,8 +87,14 @@ function buildMarkdown(
   if (options.synopsis && synopsis.trim()) {
     parts.push(`## Sinopsis\n\n${synopsis.trim()}\n\n`)
   }
+  const mdHeadings = getChapterHeadings(chapters.map((entry) => entry.chapter))
+  let mdIndex = 0
   for (const { chapter, scenes } of chapters) {
-    if (options.chapterTitles) parts.push(`\n\n# ${chapter.title}\n\n`)
+    if (options.chapterTitles) {
+      const { kicker, title: headingTitle } = headingParts(mdHeadings[mdIndex].label, chapter.title)
+      const text = [kicker, headingTitle].filter(Boolean).join('. ')
+      parts.push(`\n\n# ${text}\n\n`)
+    }
     if (chapter.summary && options.synopsis) parts.push(`*${chapter.summary}*\n\n`)
     for (const scene of scenes) {
       if (options.sceneTitles) parts.push(`\n\n## ${scene.title}\n\n`)
@@ -90,6 +102,7 @@ function buildMarkdown(
       parts.push(turndown.turndown(sanitizeContent(scene.content)))
       parts.push('\n\n')
     }
+    mdIndex++
   }
   return parts.join('').replace(/\n{4,}/g, '\n\n\n').trim() + '\n'
 }
@@ -98,10 +111,13 @@ function buildEpubChapters(
   chapters: Array<{ chapter: DocumentNode; scenes: DocumentNode[] }>,
   options: CompileOptions
 ): Array<{ title: string; html: string }> {
+  const headings = getChapterHeadings(chapters.map((entry) => entry.chapter))
   return chapters.map(({ chapter, scenes }, chapterIndex) => {
     const parts: string[] = []
+    const { kicker, title: headingTitle } = headingParts(headings[chapterIndex].label, chapter.title)
     if (options.chapterTitles) {
-      parts.push(`<h1>Capítulo ${chapterIndex + 1}. ${escapeHtml(chapter.title)}</h1>`)
+      const text = [kicker, headingTitle].filter(Boolean).join('. ')
+      parts.push(`<h1>${escapeHtml(text)}</h1>`)
     }
     if (chapter.summary && options.synopsis) {
       parts.push(`<p class="chapter-summary"><em>${escapeHtml(chapter.summary)}</em></p>`)
@@ -112,7 +128,7 @@ function buildEpubChapters(
       parts.push(`<div class="scene-content">${sanitizeContent(scene.content)}</div>`)
     }
     return {
-      title: options.chapterTitles ? chapter.title : `Capítulo ${chapterIndex + 1}`,
+      title: options.chapterTitles ? chapter.title : headings[chapterIndex].label || chapter.title,
       html: parts.join('') || '<p></p>'
     }
   })
@@ -135,10 +151,12 @@ function buildPrintHtml(
     options.synopsis && synopsis.trim()
       ? `<section class="synopsis-page"><h2>Sinopsis</h2><p>${escapeHtml(synopsis).replace(/\n/g, '<br>')}</p></section>`
       : ''
+  const headings = getChapterHeadings(chapters.map((entry) => entry.chapter))
   const body = chapters
     .map(({ chapter, scenes }, chapterIndex) => {
+      const { kicker, title: headingTitle } = headingParts(headings[chapterIndex].label, chapter.title)
       const chapterHeading = options.chapterTitles
-        ? `<header class="chapter-heading"><p class="chapter-number">Capítulo ${chapterIndex + 1}</p><h2>${escapeHtml(chapter.title)}</h2></header>`
+        ? `<header class="chapter-heading">${kicker ? `<p class="chapter-number">${escapeHtml(kicker)}</p>` : ''}${headingTitle ? `<h2>${escapeHtml(headingTitle)}</h2>` : ''}</header>`
         : ''
       const sceneHtml = scenes
         .map((scene) => {
@@ -219,7 +237,7 @@ export function PublishView() {
   const [exporting, setExporting] = useState('')
 
   const compiled = useMemo(() => {
-    if (!project) return { chapters: [], words: 0, scenes: 0, markdown: '', html: '', epubChapters: [] }
+    if (!project) return { chapters: [], words: 0, scenes: 0, markdown: '', html: '', epubChapters: [], previewHeadings: [] }
     const chapters = getManuscriptChapters(project)
       .map((chapter) => ({
         chapter,
@@ -234,7 +252,8 @@ export function PublishView() {
     const markdown = buildMarkdown(project.title, project.author, project.genre, project.synopsis, chapters, options)
     const html = buildPrintHtml(project.title, project.author, project.genre, project.synopsis, project.coverImage || '', chapters, options)
     const epubChapters = buildEpubChapters(chapters, options)
-    return { chapters, words, scenes: sceneCount, markdown, html, epubChapters }
+    const previewHeadings = getChapterHeadings(chapters.map((entry) => entry.chapter))
+    return { chapters, words, scenes: sceneCount, markdown, html, epubChapters, previewHeadings }
   }, [project, options])
 
   if (!project) return null
@@ -391,12 +410,14 @@ export function PublishView() {
                     <p>{project.synopsis}</p>
                   </div>
                 )}
-                {compiled.chapters.map(({ chapter, scenes }, chapterIndex) => (
+                {compiled.chapters.map(({ chapter, scenes }, chapterIndex) => {
+                  const heading = headingParts(compiled.previewHeadings[chapterIndex].label, chapter.title)
+                  return (
                   <div className="preview-chapter" key={chapter.id}>
                     {options.chapterTitles && (
                       <header>
-                        <span>Capítulo {chapterIndex + 1}</span>
-                        <h2>{chapter.title}</h2>
+                        {heading.kicker && <span>{heading.kicker}</span>}
+                        {heading.title && <h2>{heading.title}</h2>}
                       </header>
                     )}
                     {scenes.map((scene) => (
@@ -407,7 +428,8 @@ export function PublishView() {
                       </div>
                     ))}
                   </div>
-                ))}
+                  )
+                })}
                 {!compiled.chapters.length && (
                   <div className="publish-empty-preview">
                     <Sparkles size={20} />
