@@ -92,7 +92,8 @@ export async function saveSettings(input: AppSettings): Promise<AppSettings> {
       baseUrl: provider.baseUrl.trim(),
       model: provider.model.trim(),
       temperature: Number.isFinite(provider.temperature) ? provider.temperature : 0.7,
-      maxTokens: Number.isFinite(provider.maxTokens) ? provider.maxTokens : 2048
+      maxTokens: Number.isFinite(provider.maxTokens) ? provider.maxTokens : 2048,
+      supportsImages: Boolean(provider.supportsImages)
     }
   })
   const providerIds = new Set(providers.map((provider) => provider.id))

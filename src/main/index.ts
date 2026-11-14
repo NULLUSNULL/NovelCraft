@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
-import type { AiProvider, AiRequest, AppSettings, Project } from '../shared/types'
+import type { AiProvider, AiRequest, AppSettings, CoverGenerateRequest, Project } from '../shared/types'
 import {
   createBackup,
   createExitBackup,
@@ -21,6 +21,7 @@ import {
   saveProject
 } from './projects'
 import { cancelAiRequest, aiComplete, discoverModels, streamAiChat, testAiProvider } from './ai'
+import { generateCoverImage } from './imagegen'
 import { exportManuscript } from './exporter'
 import { getBaseDir, ensureBaseDirs } from './storage'
 import { getSettings, saveSettings } from './settings'
@@ -108,6 +109,7 @@ function registerIpc(): void {
       aiComplete(request.providerId, request.messages, request.temperature, request.maxTokens)
   )
   ipcMain.handle('ai:cancel', (_event, requestId: string) => cancelAiRequest(requestId))
+  ipcMain.handle('ai:generate-cover', (_event, request: CoverGenerateRequest) => generateCoverImage(request))
   ipcMain.handle('export:manuscript', (_event, payload: Parameters<typeof exportManuscript>[0]) =>
     exportManuscript(payload)
   )

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webFrame } from 'electron'
-import type { AiProvider, AiRequest, AiStreamEvent, AppSettings, NovelCraftApi, Project } from '../shared/types'
+import type { AiProvider, AiRequest, AiStreamEvent, AppSettings, CoverGenerateRequest, NovelCraftApi, Project } from '../shared/types'
 
 const api: NovelCraftApi = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
@@ -28,6 +28,7 @@ const api: NovelCraftApi = {
   aiChat: (request: AiRequest) => ipcRenderer.invoke('ai:chat', request),
   aiComplete: (request: Omit<AiRequest, 'requestId'>) => ipcRenderer.invoke('ai:complete', request),
   cancelAi: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId),
+  generateCover: (request: CoverGenerateRequest) => ipcRenderer.invoke('ai:generate-cover', request),
   onAiStream: (callback: (event: AiStreamEvent) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: AiStreamEvent): void => callback(data)
     ipcRenderer.on('ai:stream', listener)

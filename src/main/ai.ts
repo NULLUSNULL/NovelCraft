@@ -1,18 +1,10 @@
 import type { AiMessage, AiProvider, AiRequest, AiStreamEvent } from '../shared/types'
 import { resolveProvider } from './settings'
+import { authHeaders, friendlyError, openAiUrl, parseError, trimTrailingSlash } from './http'
 
 const controllers = new Map<string, AbortController>()
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '')
-}
-
-function openAiUrl(baseUrl: string, endpoint: string): string {
-  const base = trimTrailingSlash(baseUrl)
-  return `${base}${endpoint}`
-}
-
-function anthropicUrl(baseUrl: string): string {
+export function anthropicUrl(baseUrl: string): string {
   const base = trimTrailingSlash(baseUrl)
   return base.endsWith('/v1') ? `${base}/messages` : `${base}/v1/messages`
 }
@@ -20,32 +12,6 @@ function anthropicUrl(baseUrl: string): string {
 function anthropicModelsUrl(baseUrl: string): string {
   const base = trimTrailingSlash(baseUrl)
   return base.endsWith('/v1') ? `${base}/models` : `${base}/v1/models`
-}
-
-function friendlyError(error: unknown, provider: AiProvider): string {
-  const message = error instanceof Error ? error.message : String(error)
-  if (message === 'fetch failed' || message.includes('ECONNREFUSED')) {
-    if (provider.category === 'local') {
-      return `No se pudo conectar con ${provider.name} en ${provider.baseUrl}. Comprueba que el servidor local esté en marcha.`
-    }
-    return `No se pudo conectar con ${provider.name}. Revisa tu conexión y la URL del proveedor.`
-  }
-  return message
-}
-
-async function parseError(response: Response): Promise<string> {
-  let detail = ''
-  try {
-    const text = await response.text()
-    const parsed = JSON.parse(text) as { error?: { message?: string } | string; message?: string }
-    if (typeof parsed.error === 'string') detail = parsed.error
-    else if (parsed.error?.message) detail = parsed.error.message
-    else if (parsed.message) detail = parsed.message
-    else detail = text.slice(0, 400)
-  } catch {
-    detail = response.statusText
-  }
-  return `Error ${response.status}: ${detail || response.statusText || 'respuesta no válida'}`
 }
 
 async function consumeSse(

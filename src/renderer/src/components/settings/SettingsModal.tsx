@@ -25,7 +25,7 @@ import {
   Type,
   Wifi
 } from 'lucide-react'
-import type { AccentColor, AiCategory, AiProtocol, AiProvider, ThemeMode } from '@shared/types'
+import type { AccentColor, AiCategory, AiProtocol, AiProvider, ImageGenStyle, ThemeMode } from '@shared/types'
 import { LOCAL_PROVIDER_PRESETS } from '@shared/defaults'
 import { useAppStore } from '../../store/useAppStore'
 import { Modal, Switch } from '../ui/Modal'
@@ -256,6 +256,32 @@ function ProviderPanel({
           }}
         />
       </div>
+      <div className="provider-use-row">
+        <div>
+          <strong>Genera imágenes</strong>
+          <span>Habilita este proveedor para crear portadas con IA (DALL·E, gpt-image-1, Stable Diffusion...).</span>
+        </div>
+        <Switch
+          checked={Boolean(provider.supportsImages)}
+          onChange={(checked) => patch({ supportsImages: checked })}
+        />
+      </div>
+      {provider.supportsImages && (
+        <div className="provider-use-row">
+          <div>
+            <strong>Usar para portadas</strong>
+            <span>Este es el proveedor de imágenes seleccionado en Ajustes → IA.</span>
+          </div>
+          <Switch
+            checked={settings.ai.imageProviderId === provider.id}
+            onChange={(checked) =>
+              updateSettings((draft) => {
+                draft.ai.imageProviderId = checked ? provider.id : ''
+              })
+            }
+          />
+        </div>
+      )}
       <div className="row mt-12">
         <button className="btn sm" onClick={() => void test()} disabled={testing}>
           {testing ? <Loader2 size={12} /> : <Check size={12} />}
@@ -566,6 +592,38 @@ export function SettingsModal() {
                       <span><strong>{label}</strong><small>{description}</small></span>
                     </button>
                   ))}
+                </div>
+              </section>
+              <section className="settings-section">
+                <div className="settings-section-title">Portadas con IA</div>
+                <div className="field-row">
+                  <Field label="Proveedor de imágenes para portadas" hint="Se usa con el botón «Generar con IA» al crear o editar un proyecto.">
+                    <select
+                      className="select sm"
+                      value={settings.ai.imageProviderId}
+                      onChange={(event) => updateSettings((draft) => { draft.ai.imageProviderId = event.target.value })}
+                    >
+                      <option value="">Automático (proveedor activo)</option>
+                      {settings.providers.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.name} · {provider.model || 'sin modelo'}{provider.supportsImages ? '' : ' (sin marcar para imágenes)'}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Estilo de portada" hint="Orienta el prompt que se envía al generador de imágenes.">
+                    <select
+                      className="select sm"
+                      value={settings.ai.coverStyle}
+                      onChange={(event) => updateSettings((draft) => { draft.ai.coverStyle = event.target.value as ImageGenStyle })}
+                    >
+                      <option value="auto">Automático</option>
+                      <option value="illustration">Ilustración editorial</option>
+                      <option value="painting">Pintura al óleo</option>
+                      <option value="photo">Fotografía cinematográfica</option>
+                      <option value="minimal">Minimalista</option>
+                    </select>
+                  </Field>
                 </div>
               </section>
               <section className="settings-section ai-providers-section">
