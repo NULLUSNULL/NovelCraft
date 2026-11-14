@@ -67,6 +67,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
     enabled: true,
     selectionActions: true,
     activeProviderId: 'ollama-local',
+    imageProviderId: '',
+    coverStyle: 'auto',
     includeManuscript: true,
     includeCodex: true,
     includePlots: true,

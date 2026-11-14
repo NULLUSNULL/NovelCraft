@@ -16,6 +16,7 @@ export type ThemeMode = 'dark' | 'light' | 'sepia' | 'system'
 export type AccentColor = 'amber' | 'rose' | 'sage' | 'ocean' | 'violet' | 'graphite'
 export type AiProtocol = 'openai' | 'anthropic' | 'ollama'
 export type AiCategory = 'cloud' | 'local'
+export type ImageGenStyle = 'auto' | 'illustration' | 'painting' | 'photo' | 'minimal'
 
 export interface DocumentNode {
   id: ID
@@ -199,6 +200,7 @@ export interface AiProvider {
   clearApiKey?: boolean
   temperature: number
   maxTokens: number
+  supportsImages?: boolean
 }
 
 export interface EditorSettings {
@@ -214,10 +216,28 @@ export interface AiSettings {
   enabled: boolean
   selectionActions: boolean
   activeProviderId: ID
+  imageProviderId: ID
+  coverStyle: ImageGenStyle
   includeManuscript: boolean
   includeCodex: boolean
   includePlots: boolean
   includeSceneContent: boolean
+}
+
+export interface CoverPromptInput {
+  title: string
+  author?: string
+  genre?: string
+  synopsis?: string
+  description?: string
+  style?: ImageGenStyle
+}
+
+export interface CoverGenerateRequest {
+  providerId: ID
+  prompt: string
+  width?: number
+  height?: number
 }
 
 export interface BackupSettings {
@@ -372,6 +392,7 @@ export interface NovelCraftApi {
   aiChat: (request: AiRequest) => Promise<{ content: string }>
   aiComplete: (request: Omit<AiRequest, 'requestId'>) => Promise<{ content: string }>
   cancelAi: (requestId: string) => Promise<void>
+  generateCover: (request: CoverGenerateRequest) => Promise<string>
   onAiStream: (callback: (event: AiStreamEvent) => void) => () => void
   exportManuscript: (payload: ManuscriptExportPayload) => Promise<ExportResult>
   minimizeWindow: () => Promise<void>

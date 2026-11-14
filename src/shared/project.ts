@@ -1,6 +1,7 @@
 import type {
   ChapterKind,
   AiSettings,
+  CoverPromptInput,
   Character,
   CreateProjectInput,
   DocumentNode,
@@ -126,6 +127,29 @@ export function createProject(input: CreateProjectInput): Project {
     plotEdges: [],
     trash: []
   }
+}
+
+const COVER_STYLE_PROMPTS: Record<string, string> = {
+  illustration: 'estilo de ilustración editorial contemporánea, tinta y color plano con textura sutil',
+  painting: 'pintura al óleo expresiva con pinceladas visibles y claroscuro',
+  photo: 'fotografía cinematográfica con grano de película 35 mm y luz natural',
+  minimal: 'composición minimalista de alto contraste, formas simples y mucho espacio negativo'
+}
+
+export function buildCoverPrompt(input: CoverPromptInput): string {
+  const title = input.title.trim() || 'Novela sin título'
+  const parts: string[] = [
+    `Portada de libro vertical (proporción 2:3) para la novela «${title}»`
+  ]
+  if (input.genre?.trim()) parts.push(`género ${input.genre.trim().toLowerCase()}`)
+  const synopsis = stripHtml(input.synopsis || '').slice(0, 320).trim()
+  const notes = stripHtml(input.description || '').slice(0, 200).trim()
+  if (synopsis) parts.push(`sinopsis: ${synopsis}`)
+  if (notes) parts.push(`notas de atmósfera: ${notes}`)
+  const style = input.style && input.style !== 'auto' ? COVER_STYLE_PROMPTS[input.style] : ''
+  parts.push(style || 'ilustración artística evocadora, paleta rica, atmósfera inmersiva')
+  parts.push('sin texto, sin tipografía, sin logotipos, sin marco; el espacio superior debe ser limpio para titular después')
+  return parts.join('. ') + '.'
 }
 
 export function getRootChildren(project: Project, rootId: ID): DocumentNode[] {
