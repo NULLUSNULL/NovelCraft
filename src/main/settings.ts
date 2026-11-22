@@ -60,6 +60,23 @@ async function readSecrets(): Promise<SecretMap> {
 export async function getSettings(): Promise<AppSettings> {
   const raw = await readJson<Partial<AppSettings> | null>(getSettingsFile(), null)
   const settings = normalizeSettings(raw)
+  const hasLocalComfyUi = settings.providers.some(
+    (provider) => provider.protocol === 'comfyui' && provider.category === 'local'
+  )
+  if (raw && Array.isArray(raw.providers) && !hasLocalComfyUi) {
+    const defaultComfyUi = DEFAULT_SETTINGS.providers.find(
+      (provider) => provider.id === 'comfyui-local'
+    )
+    if (defaultComfyUi) {
+      const localComfyUi = structuredClone(defaultComfyUi)
+      if (settings.providers.some((provider) => provider.id === localComfyUi.id)) {
+        localComfyUi.id = 'comfyui-local-generated'
+      }
+      settings.providers.push(localComfyUi)
+      if (!settings.ai.imageProviderId) settings.ai.imageProviderId = localComfyUi.id
+      return saveSettings(settings)
+    }
+  }
   const secrets = await readSecrets()
   settings.providers = settings.providers.map((provider) => ({
     ...provider,
@@ -93,7 +110,8 @@ export async function saveSettings(input: AppSettings): Promise<AppSettings> {
       model: provider.model.trim(),
       temperature: Number.isFinite(provider.temperature) ? provider.temperature : 0.7,
       maxTokens: Number.isFinite(provider.maxTokens) ? provider.maxTokens : 2048,
-      supportsImages: Boolean(provider.supportsImages)
+      supportsImages: Boolean(provider.supportsImages),
+      supportsText: provider.supportsText !== false
     }
   })
   const providerIds = new Set(providers.map((provider) => provider.id))

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webFrame } from 'electron'
-import type { AiProvider, AiRequest, AiStreamEvent, AppSettings, CoverGenerateRequest, NovelCraftApi, Project } from '../shared/types'
+import type { AiProvider, AiRequest, AiStreamEvent, AppSettings, CoverGenerateRequest, ImageGenerateRequest, NovelCraftApi, Project } from '../shared/types'
 
 const api: NovelCraftApi = {
   getAppInfo: () => ipcRenderer.invoke('app:info'),
@@ -22,13 +22,20 @@ const api: NovelCraftApi = {
     ipcRenderer.invoke('snapshots:delete', id, documentId, snapshotId),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: (settings: AppSettings) => ipcRenderer.invoke('settings:save', settings),
-  listModels: (providerId: string) => ipcRenderer.invoke('ai:models', providerId),
+  listModels: (providerId: string, provider?: AiProvider) =>
+    ipcRenderer.invoke('ai:models', providerId, provider),
   testProvider: (providerId: string, provider?: AiProvider) =>
     ipcRenderer.invoke('ai:test', providerId, provider),
   aiChat: (request: AiRequest) => ipcRenderer.invoke('ai:chat', request),
-  aiComplete: (request: Omit<AiRequest, 'requestId'>) => ipcRenderer.invoke('ai:complete', request),
+  aiComplete: (request: Omit<AiRequest, 'requestId'> & { requestId?: string }) => ipcRenderer.invoke('ai:complete', request),
   cancelAi: (requestId: string) => ipcRenderer.invoke('ai:cancel', requestId),
   generateCover: (request: CoverGenerateRequest) => ipcRenderer.invoke('ai:generate-cover', request),
+  generateImage: (request: ImageGenerateRequest, requestId?: string) => ipcRenderer.invoke('ai:generate-image', request, requestId),
+  cancelImageGeneration: (requestId: string) => ipcRenderer.invoke('ai:cancel-image-generation', requestId),
+  addGeneratedImageToProject: (projectId, image) =>
+    ipcRenderer.invoke('projects:add-generated-image', projectId, image),
+  getLocalComfyUiStatus: () => ipcRenderer.invoke('comfyui:status'),
+  startLocalComfyUi: () => ipcRenderer.invoke('comfyui:start'),
   onAiStream: (callback: (event: AiStreamEvent) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, data: AiStreamEvent): void => callback(data)
     ipcRenderer.on('ai:stream', listener)

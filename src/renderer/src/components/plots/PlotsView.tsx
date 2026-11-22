@@ -18,12 +18,15 @@ import {
 } from '@xyflow/react'
 import {
   ArrowRight,
+  BookOpen,
   CalendarDays,
   Clock3,
   GitBranch,
   Link2,
   Maximize2,
   Network,
+  PanelRight,
+  PanelRightClose,
   Plus,
   Sparkles,
   Trash2,
@@ -31,9 +34,10 @@ import {
   Waypoints,
   X
 } from 'lucide-react'
-import type { DocumentNode, Plot } from '@shared/types'
+import type { AiProvider, DocumentNode, Plot } from '@shared/types'
 import {
   formatNumber,
+  getManuscriptChapters,
   getManuscriptScenes,
   getStatusLabel,
   initials,
@@ -42,7 +46,9 @@ import {
 } from '@shared/project'
 import { useAppStore } from '../../store/useAppStore'
 import { ColorPicker, Field, MultiSelect, TagInput } from '../ui/Form'
-import { ConfirmDialog } from '../ui/Modal'
+import { ConfirmDialog, Modal } from '../ui/Modal'
+import { ChapterAnalysisReview } from '../write/ChapterAnalysisReview'
+import { CodexAiDraftField } from '../codex/CodexAiDraftField'
 
 interface PlotNodeData extends Record<string, unknown> {
   plot: Plot
@@ -61,7 +67,7 @@ function PlotNodeCard({ data, selected }: NodeProps) {
         <span className="plot-node-kind" style={{ color: plot.color }}>
           {plot.type}
         </span>
-        <span className="plot-node-status">{plot.status}</span>
+        <span className={`plot-node-status ${plot.status}`}>{plot.status}</span>
       </div>
       <div className="plot-node-title">{plot.title}</div>
       <div className="plot-node-summary">{plot.summary || plot.premise || 'Sin descripción'}</div>
@@ -90,7 +96,15 @@ const EDGE_STYLE = {
   contrapunto: 'dotted'
 } as const
 
-function PlotGraph({ onFit }: { onFit: (instance: ReactFlowInstance) => void }) {
+function PlotGraph({
+  onFit,
+  onSelectPlot,
+  onSelectEdge
+}: {
+  onFit: (instance: ReactFlowInstance) => void
+  onSelectPlot: () => void
+  onSelectEdge: () => void
+}) {
   const project = useAppStore((state) => state.project)
   const selectedPlotId = useAppStore((state) => state.selectedPlotId)
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId)
@@ -108,7 +122,7 @@ function PlotGraph({ onFit }: { onFit: (instance: ReactFlowInstance) => void }) 
         data: {
           plot,
           selected: plot.id === selectedPlotId,
-          sceneCount: plot.sceneIds.length,
+          sceneCount: plot.sceneIds.length || plot.chapterIds?.length || 0,
           characterNames: plot.characterIds
             .map((id) => project?.characters.find((character) => character.id === id)?.name)
             .filter((name): name is string => Boolean(name))
@@ -170,9 +184,23 @@ function PlotGraph({ onFit }: { onFit: (instance: ReactFlowInstance) => void }) 
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
-        onNodeClick={(_, node) => selectPlot(node.id)}
-        onEdgeClick={(_, edge) => selectEdge(edge.id)}
-        onPaneClick={() => selectEdge('')}
+        onNodeClick={(_, node) => {
+          selectPlot(node.id)
+        }}
+        onNodeDoubleClick={(_, node) => {
+          selectPlot(node.id)
+          onSelectPlot()
+        }}
+        onEdgeClick={(_, edge) => {
+          selectPlot('')
+          selectEdge(edge.id)
+        }}
+        onEdgeDoubleClick={(_, edge) => {
+          selectPlot('')
+          selectEdge(edge.id)
+          onSelectEdge()
+        }}
+        onPaneClick={() => selectPlot('')}
         onNodeDragStop={(_, node) => updatePlot(node.id, { position: node.position })}
         onInit={onFit}
         fitView
@@ -205,7 +233,7 @@ function PlotGraph({ onFit }: { onFit: (instance: ReactFlowInstance) => void }) 
   )
 }
 
-function PlotTimeline() {
+function PlotTimeline({ onSelectPlot }: { onSelectPlot: () => void }) {
   const project = useAppStore((state) => state.project)
   const selectDocument = useAppStore((state) => state.selectDocument)
   const selectPlot = useAppStore((state) => state.selectPlot)
@@ -245,6 +273,7 @@ function PlotTimeline() {
                 onClick={(event) => {
                   event.stopPropagation()
                   selectPlot(plot.id)
+                  onSelectPlot()
                 }}
               >
                 {plot.title}
@@ -292,7 +321,15 @@ function PlotTimeline() {
   )
 }
 
-function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
+function PlotInspectorPanel({
+  open,
+  onClose,
+  onDelete
+}: {
+  open: boolean
+  onClose: () => void
+  onDelete: () => void
+}) {
   const project = useAppStore((state) => state.project)
   const selectedPlotId = useAppStore((state) => state.selectedPlotId)
   const selectedEdgeId = useAppStore((state) => state.selectedEdgeId)
@@ -304,7 +341,20 @@ function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
   const plot = project.plots.find((item) => item.id === selectedPlotId)
   const edge = project.plotEdges.find((item) => item.id === selectedEdgeId)
 
+  if (!plot && !edge && open) {
+    return (
+      <aside className="plots-panel plots-panel-empty" aria-label="Detalles de trama">
+        <div className="plots-empty-panel">
+          <Network size={20} />
+          <h3>Detalles de la trama</h3>
+          <p>Selecciona una tarjeta o una conexión del grafo para ver y editar sus características aquí.</p>
+        </div>
+      </aside>
+    )
+  }
+
   if (edge) {
+    if (!open) return null
     const source = project.plots.find((item) => item.id === edge.source)
     const target = project.plots.find((item) => item.id === edge.target)
     return (
@@ -314,7 +364,7 @@ function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
             <div className="card-eyebrow">Conexión</div>
             <h2>Relación de tramas</h2>
           </div>
-          <button className="icon-btn sm" onClick={() => selectEdge('')}><X size={14} /></button>
+          <button className="icon-btn sm" onClick={onClose} aria-label="Cerrar detalles de la relación"><X size={14} /></button>
         </div>
         <div className="plots-panel-scroll">
           <div className="edge-endpoints">
@@ -342,22 +392,35 @@ function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
     )
   }
 
-  if (!plot) {
-    return (
-      <aside className="plots-panel">
-        <div className="plots-empty-panel">
-          <Network size={26} />
-          <h3>Selecciona una trama</h3>
-          <p>Haz clic en una tarjeta del grafo para editar sus metadatos.</p>
-        </div>
-      </aside>
-    )
+  if (!plot || !open) {
+    return null
   }
 
   const characterOptions = project.characters.map((character) => ({ id: character.id, label: character.name, sub: character.role, color: character.color }))
   const scenes = getManuscriptScenes(project)
   const sceneOptions = scenes.map((scene) => ({ id: scene.id, label: scene.title, sub: project.nodes[scene.parentId]?.title }))
+  const chapterOptions = getManuscriptChapters(project).map((chapter) => ({
+    id: chapter.id,
+    label: chapter.title,
+    sub: `${getManuscriptScenes(project).filter((scene) => scene.parentId === chapter.id).length} escenas`
+  }))
+  const locationOptions = project.locations.map((location) => ({ id: location.id, label: location.name, sub: location.type, color: location.color }))
+  const itemOptions = project.items.map((item) => ({ id: item.id, label: item.name, sub: item.type, color: item.color }))
   const linkedScenes = scenesForPlot(project, plot.id)
+  const chapters = getManuscriptChapters(project).filter((chapter) =>
+    (plot.chapterIds || []).includes(chapter.id) || linkedScenes.some((scene) => scene.parentId === chapter.id)
+  )
+  const chapterContext = `TRAMA: ${plot.title}
+RESUMEN: ${plot.summary}
+PREMISA: ${plot.premise}
+CONFLICTO: ${plot.conflict}
+APUESTAS: ${plot.stakes}
+TEMA: ${plot.theme}
+PERSONAJES: ${plot.characterIds.map((id) => project.characters.find((character) => character.id === id)?.name).filter(Boolean).join(', ')}
+LUGARES: ${(plot.locationIds || []).map((id) => project.locations.find((location) => location.id === id)?.name).filter(Boolean).join(', ')}
+OBJETOS: ${(plot.itemIds || []).map((id) => project.items.find((item) => item.id === id)?.name).filter(Boolean).join(', ')}
+CAPÍTULOS: ${chapters.map((chapter) => chapter.title).join(', ')}
+RESOLUCIÓN ACTUAL: ${plot.resolution}`
 
   return (
     <aside className="plots-panel">
@@ -404,9 +467,15 @@ function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
         <Field label="Tema">
           <input className="input sm" value={plot.theme} onChange={(event) => updatePlot(plot.id, { theme: event.target.value })} />
         </Field>
-        <Field label="Resolución">
-          <textarea className="textarea sm" value={plot.resolution} onChange={(event) => updatePlot(plot.id, { resolution: event.target.value })} rows={2} />
-        </Field>
+        <CodexAiDraftField
+          label="Resolución"
+          skill="plot-resolution"
+          value={plot.resolution}
+          context={chapterContext}
+          onChange={(resolution) => updatePlot(plot.id, { resolution })}
+          rows={3}
+          placeholder="Describe cómo podría cerrarse esta línea narrativa…"
+        />
         <div className="inspector-subhead"><Clock3 size={12} />Temporalidad</div>
         <div className="field-row">
           <Field label="Inicio">
@@ -419,8 +488,17 @@ function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
         <Field label="Personajes" className="mt-12">
           <MultiSelect options={characterOptions} value={plot.characterIds} onChange={(characterIds) => updatePlot(plot.id, { characterIds })} placeholder="Vincular personajes" compact />
         </Field>
+        <Field label="Capítulos">
+          <MultiSelect options={chapterOptions} value={plot.chapterIds || []} onChange={(chapterIds) => updatePlot(plot.id, { chapterIds })} placeholder="Vincular capítulos" compact />
+        </Field>
         <Field label="Escenas">
           <MultiSelect options={sceneOptions} value={plot.sceneIds} onChange={(sceneIds) => updatePlot(plot.id, { sceneIds })} placeholder="Vincular escenas" compact />
+        </Field>
+        <Field label="Lugares importantes">
+          <MultiSelect options={locationOptions} value={plot.locationIds || []} onChange={(locationIds) => updatePlot(plot.id, { locationIds })} placeholder="Vincular lugares" compact />
+        </Field>
+        <Field label="Objetos importantes">
+          <MultiSelect options={itemOptions} value={plot.itemIds || []} onChange={(itemIds) => updatePlot(plot.id, { itemIds })} placeholder="Vincular objetos" compact />
         </Field>
         <Field label="Color">
           <ColorPicker value={plot.color} onChange={(color) => updatePlot(plot.id, { color })} />
@@ -428,8 +506,15 @@ function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
         <Field label="Etiquetas">
           <TagInput value={plot.tags} onChange={(tags) => updatePlot(plot.id, { tags })} />
         </Field>
-        <div className="inspector-subhead"><Waypoints size={12} />Escenas vinculadas · {linkedScenes.length}</div>
+        <div className="inspector-subhead"><Waypoints size={12} />Capítulos y escenas · {chapters.length} capítulos · {linkedScenes.length} escenas</div>
         <div className="plot-linked-scenes">
+          {chapters.map((chapter) => (
+            <div className="plot-linked-scene" key={chapter.id}>
+              <BookOpen size={12} />
+              <span className="grow truncate">{chapter.title}</span>
+              <span className="faint">{getManuscriptScenes(project).filter((scene) => scene.parentId === chapter.id && plot.sceneIds.includes(scene.id)).length} escenas vinculadas</span>
+            </div>
+          ))}
           {linkedScenes.map((scene) => (
             <div className="plot-linked-scene" key={scene.id}>
               <span className={`status-dot ${scene.status}`} />
@@ -446,14 +531,38 @@ function PlotInspectorPanel({ onDelete }: { onDelete: () => void }) {
 
 export function PlotsView() {
   const project = useAppStore((state) => state.project)
+  const settings = useAppStore((state) => state.settings)
   const addPlot = useAppStore((state) => state.addPlot)
   const deletePlot = useAppStore((state) => state.deletePlot)
   const selectedPlotId = useAppStore((state) => state.selectedPlotId)
+  const selectedEdgeId = useAppStore((state) => state.selectedEdgeId)
+  const selectPlot = useAppStore((state) => state.selectPlot)
+  const inspectorOpen = useAppStore((state) => state.inspectorOpen)
+  const inspectorTab = useAppStore((state) => state.inspectorTab)
+  const setInspectorOpen = useAppStore((state) => state.setInspectorOpen)
+  const setInspectorTab = useAppStore((state) => state.setInspectorTab)
   const [mode, setMode] = useState<'graph' | 'timeline'>('graph')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [flow, setFlow] = useState<ReactFlowInstance | null>(null)
+  const [chapterPickerOpen, setChapterPickerOpen] = useState(false)
+  const [chapterAnalysisOpen, setChapterAnalysisOpen] = useState(false)
+  const [plotDetailsOpen, setPlotDetailsOpen] = useState(false)
+  const [edgeDetailsOpen, setEdgeDetailsOpen] = useState(false)
+  const [plotDetailsColumnOpen, setPlotDetailsColumnOpen] = useState(true)
+  const [analysisChapterId, setAnalysisChapterId] = useState('')
+  const [analysisScope, setAnalysisScope] = useState<'chapter' | 'novel'>('chapter')
 
   if (!project) return null
+  const chapters = getManuscriptChapters(project)
+  const analysisProvider = settings.providers.find(
+    (provider): provider is AiProvider =>
+      provider.id === settings.ai.activeProviderId &&
+      provider.protocol !== 'comfyui' &&
+      provider.supportsText !== false
+  )
+  const selectedAnalysisChapterId = chapters.some((chapter) => chapter.id === analysisChapterId)
+    ? analysisChapterId
+    : chapters[0]?.id || ''
 
   return (
     <div className="plots-view">
@@ -475,11 +584,51 @@ export function PlotsView() {
           </div>
         </div>
         <div className="row">
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              setAnalysisChapterId(selectedAnalysisChapterId)
+              setAnalysisScope('chapter')
+              setChapterPickerOpen(true)
+            }}
+            disabled={!analysisProvider || !chapters.length}
+            title={!analysisProvider
+              ? 'Configura un proveedor de texto activo en Ajustes → IA'
+              : !chapters.length
+                ? 'Añade un capítulo al manuscrito para analizar sus tramas'
+                : 'Analizar las tramas de un capítulo o de toda la novela'}
+          >
+            <Sparkles size={13} />
+            Analizar tramas
+          </button>
           {mode === 'graph' && (
             <button className="icon-btn sm" onClick={() => flow?.fitView({ padding: 0.3 })} title="Ajustar vista">
               <Maximize2 size={14} />
             </button>
           )}
+          {mode === 'graph' && (
+            <button
+              className={`icon-btn sm ${plotDetailsColumnOpen ? 'active' : ''}`}
+              onClick={() => setPlotDetailsColumnOpen((open) => !open)}
+              title={plotDetailsColumnOpen ? 'Ocultar detalles para ampliar el grafo' : 'Mostrar detalles de la trama'}
+              aria-label={plotDetailsColumnOpen ? 'Ocultar detalles para ampliar el grafo' : 'Mostrar detalles de la trama'}
+              aria-pressed={plotDetailsColumnOpen}
+            >
+              {plotDetailsColumnOpen ? <PanelRightClose size={14} /> : <PanelRight size={14} />}
+            </button>
+          )}
+          <button
+            className={`icon-btn sm ${inspectorOpen && inspectorTab === 'ai' ? 'active' : ''}`}
+            onClick={() => {
+              const assistantOpen = inspectorOpen && inspectorTab === 'ai'
+              setInspectorTab('ai')
+              setInspectorOpen(!assistantOpen)
+            }}
+            title={inspectorOpen && inspectorTab === 'ai' ? 'Ocultar asistente' : 'Mostrar asistente'}
+            aria-label={inspectorOpen && inspectorTab === 'ai' ? 'Ocultar asistente' : 'Mostrar asistente'}
+          >
+            <Sparkles size={14} />
+          </button>
           <button className="btn btn-primary btn-sm" onClick={() => { setMode('graph'); addPlot() }}>
             <Plus size={13} />
             Nueva trama
@@ -499,24 +648,155 @@ export function PlotsView() {
               </button>
             </div>
           ) : mode === 'graph' ? (
-            <PlotGraph onFit={setFlow} />
+            <PlotGraph
+              onFit={setFlow}
+              onSelectPlot={() => setPlotDetailsOpen(true)}
+              onSelectEdge={() => setEdgeDetailsOpen(true)}
+            />
           ) : (
-            <PlotTimeline />
+            <PlotTimeline onSelectPlot={() => setPlotDetailsOpen(true)} />
           )}
         </div>
-        <PlotInspectorPanel onDelete={() => setConfirmDelete(true)} />
+        {mode === 'graph' && plotDetailsColumnOpen && (
+          <PlotInspectorPanel
+            open
+            onClose={() => {
+              setPlotDetailsOpen(false)
+              setEdgeDetailsOpen(false)
+              selectPlot('')
+            }}
+            onDelete={() => setConfirmDelete(true)}
+          />
+        )}
       </div>
+      <Modal
+        open={plotDetailsOpen || edgeDetailsOpen}
+        onClose={() => {
+          setPlotDetailsOpen(false)
+          setEdgeDetailsOpen(false)
+        }}
+        title={selectedEdgeId
+          ? 'Relación de tramas'
+          : project.plots.find((plot) => plot.id === selectedPlotId)?.title || 'Detalles de trama'}
+        subtitle={selectedEdgeId
+          ? 'Edita o elimina esta conexión.'
+          : 'Edita la línea narrativa y sus vínculos en el manuscrito.'}
+        eyebrow={selectedEdgeId ? 'Grafo narrativo' : 'Ficha de trama'}
+        size="xl"
+        className={selectedEdgeId ? 'plot-edge-modal' : 'plot-detail-modal'}
+      >
+        <PlotInspectorPanel
+          open={plotDetailsOpen || edgeDetailsOpen}
+          onClose={() => {
+            setPlotDetailsOpen(false)
+            setEdgeDetailsOpen(false)
+          }}
+          onDelete={() => setConfirmDelete(true)}
+        />
+      </Modal>
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
         onConfirm={() => {
           if (selectedPlotId) deletePlot(selectedPlotId)
+          setPlotDetailsOpen(false)
+          selectPlot('')
         }}
         title="Eliminar trama"
         message="Se eliminará la trama, sus conexiones y se desvinculará de todas las escenas. Los personajes no se eliminarán."
         confirmLabel="Eliminar trama"
         danger
       />
+      <Modal
+        open={chapterPickerOpen}
+        onClose={() => setChapterPickerOpen(false)}
+        title="Analizar tramas"
+        subtitle="Analiza un capítulo concreto o recorre toda la novela para consolidar las tramas a lo largo del tiempo."
+        eyebrow="Lectura narrativa"
+        size="md"
+        footer={
+          <>
+            <button type="button" className="btn" onClick={() => setChapterPickerOpen(false)}>Cancelar</button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!selectedAnalysisChapterId}
+              onClick={() => {
+                setAnalysisChapterId(selectedAnalysisChapterId)
+                setChapterPickerOpen(false)
+                setChapterAnalysisOpen(true)
+              }}
+            >
+              <BookOpen size={13} />
+              {analysisScope === 'novel' ? 'Analizar novela completa' : 'Analizar capítulo'}
+            </button>
+          </>
+        }
+      >
+        {chapters.length ? (
+          <>
+            <div className="segmented plot-analysis-scope" role="group" aria-label="Alcance del análisis">
+              <button
+                type="button"
+                className={analysisScope === 'chapter' ? 'active' : ''}
+                aria-pressed={analysisScope === 'chapter'}
+                onClick={() => setAnalysisScope('chapter')}
+              >
+                Un capítulo
+              </button>
+              <button
+                type="button"
+                className={analysisScope === 'novel' ? 'active' : ''}
+                aria-pressed={analysisScope === 'novel'}
+                onClick={() => setAnalysisScope('novel')}
+              >
+                Toda la novela
+              </button>
+            </div>
+            {analysisScope === 'chapter' ? (
+              <Field label="Capítulo del manuscrito">
+                <select
+                  className="select"
+                  value={selectedAnalysisChapterId}
+                  onChange={(event) => setAnalysisChapterId(event.target.value)}
+                  autoFocus
+                >
+                  {chapters.map((chapter, index) => (
+                    <option key={chapter.id} value={chapter.id}>
+                      {index + 1}. {chapter.title || 'Capítulo sin título'}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <div className="form-card">
+                <strong>{chapters.length} capítulos en el manuscrito</strong>
+                <p style={{ marginBottom: 0 }}>
+                  Se analizarán uno por uno para reducir errores por límite de contexto. Las propuestas repetidas se consolidarán y podrás revisarlas antes de aplicarlas.
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="form-card">
+            <strong>Aún no hay capítulos.</strong>
+            <p style={{ marginBottom: 0 }}>Añade capítulos al manuscrito antes de analizar las tramas.</p>
+          </div>
+        )}
+        <p className="field-hint">
+          La IA propondrá cambios de trama, asociaciones y conflictos respaldados por el texto. Revisa y acepta cada propuesta antes de modificar el grafo.
+        </p>
+      </Modal>
+      {chapterAnalysisOpen && analysisProvider && selectedAnalysisChapterId && (
+        <ChapterAnalysisReview
+          project={project}
+          chapterId={selectedAnalysisChapterId}
+          provider={analysisProvider}
+          mode="plots"
+          wholeNovel={analysisScope === 'novel'}
+          onClose={() => setChapterAnalysisOpen(false)}
+        />
+      )}
     </div>
   )
 }

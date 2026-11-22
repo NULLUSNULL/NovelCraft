@@ -7,10 +7,13 @@ import type {
   AppSettings,
   AppView,
   Character,
+  CodexImage,
   CreateProjectInput,
   DocumentNode,
   EntityKind,
   ID,
+  ImageGenerateRequest,
+  ImageQueueJob,
   LibraryEntry,
   Location,
   Plot,
@@ -34,6 +37,8 @@ import {
   makeId,
   nowIso
 } from '@shared/project'
+import { applyChapterReviewProposal } from '@shared/chapterAnalysis'
+import type { ChapterReviewProposal } from '@shared/types'
 import { emptyCharacter, emptyItem, emptyLocation, emptyPlot, emptyPlotEdge } from '../lib/factories'
 
 export type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
@@ -51,6 +56,7 @@ export interface SelectedEntity {
 }
 
 export type InspectorTab = 'scene' | 'ai'
+export type SettingsSection = 'general' | 'editor' | 'ai' | 'backups' | 'about'
 
 interface AppState {
   booted: boolean
@@ -65,12 +71,16 @@ interface AppState {
   codexCategory: EntityKind
   selectedPlotId: ID
   selectedEdgeId: ID
+  imageStudioEntityKind: EntityKind | ''
+  imageStudioEntityId: ID
+  imageQueue: ImageQueueJob[]
   sidebarOpen: boolean
   inspectorOpen: boolean
   inspectorTab: InspectorTab
   focusMode: boolean
   projectManagerOpen: boolean
   settingsOpen: boolean
+  settingsSection: SettingsSection
   commandPaletteOpen: boolean
   snapshotsOpen: boolean
   backupManagerOpen: boolean
@@ -95,6 +105,12 @@ interface AppState {
   selectDocument: (id: ID, options?: { selectChapter?: boolean }) => void
   openDashboard: () => void
   selectEntity: (kind: EntityKind, id: ID) => void
+  openImageStudioForEntity: (kind: EntityKind, id: ID) => void
+  enqueueImageGeneration: (projectId: ID, request: ImageGenerateRequest) => ID
+  updateImageQueueJob: (id: ID, status: ImageQueueJob['status'], error?: string, image?: CodexImage, libraryEntry?: LibraryEntry) => void
+  removeImageQueueJob: (id: ID) => void
+  cancelImageQueueJob: (id: ID) => void
+  clearFinishedImageJobs: () => void
   setCodexCategory: (kind: EntityKind) => void
   selectPlot: (id: ID) => void
   selectEdge: (id: ID) => void
@@ -103,13 +119,14 @@ interface AppState {
   setInspectorTab: (tab: InspectorTab) => void
   setFocusMode: (focus: boolean) => void
   setProjectManagerOpen: (open: boolean) => void
-  setSettingsOpen: (open: boolean) => void
+  setSettingsOpen: (open: boolean, section?: SettingsSection) => void
   setCommandPaletteOpen: (open: boolean) => void
   setSnapshotsOpen: (open: boolean) => void
   setBackupManagerOpen: (open: boolean) => void
   setTrashOpen: (open: boolean) => void
   toggleChapter: (id: ID) => void
   mutateProject: (mutator: (draft: Draft<Project>) => void) => void
+  applyChapterReviewProposal: (proposal: ChapterReviewProposal) => boolean
   updateNode: (id: ID, patch: Partial<DocumentNode>) => void
   updateNodeContent: (id: ID, content: string, wordCount: number) => void
   addChapter: () => ID | null
@@ -131,6 +148,9 @@ interface AppState {
   addItem: () => void
   updateItem: (id: ID, patch: Partial<WorldItem>) => void
   deleteItem: (id: ID) => void
+  addCodexImage: (image: CodexImage) => void
+  updateCodexImage: (id: ID, patch: Partial<CodexImage>) => void
+  deleteCodexImage: (id: ID) => void
   addPlot: () => void
   updatePlot: (id: ID, patch: Partial<Plot>) => void
   deletePlot: (id: ID) => void
@@ -149,6 +169,47 @@ interface AppState {
 }
 
 const fallbackSettings = structuredClone(DEFAULT_SETTINGS)
+let imageQueueWorker: Promise<void> | null = null
+
+function startImageQueueWorker(): void {
+  if (imageQueueWorker) return
+  imageQueueWorker = (async () => {
+    while (true) {
+      const job = useAppStore.getState().imageQueue.find((entry) => entry.status === 'queued')
+      if (!job) return
+
+      useAppStore.getState().updateImageQueueJob(job.id, 'processing')
+      try {
+        const url = await window.novelcraft.generateImage(job.request, job.id)
+        if (useAppStore.getState().imageQueue.find((entry) => entry.id === job.id)?.status === 'cancelled') continue
+        const image: CodexImage = {
+          id: job.id,
+          kind: job.request.kind,
+          title: job.request.kind === 'cover' ? 'Portada generada' : job.request.prompt.slice(0, 90),
+          prompt: job.request.prompt,
+          url,
+          source: 'generated',
+          entityKind: job.request.entityKind,
+          entityId: job.request.entityId,
+          aspect: job.request.aspect,
+          style: job.request.style,
+          width: job.request.width || 1024,
+          height: job.request.height || 1024,
+          createdAt: job.createdAt
+        }
+        const libraryEntry = await window.novelcraft.addGeneratedImageToProject(job.projectId, image)
+        useAppStore.getState().updateImageQueueJob(job.id, 'completed', '', image, libraryEntry)
+      } catch (error) {
+        if (useAppStore.getState().imageQueue.find((entry) => entry.id === job.id)?.status === 'cancelled') continue
+        const message = error instanceof Error ? error.message : String(error)
+        useAppStore.getState().updateImageQueueJob(job.id, 'failed', message)
+      }
+    }
+  })().finally(() => {
+    imageQueueWorker = null
+    if (useAppStore.getState().imageQueue.some((job) => job.status === 'queued')) startImageQueueWorker()
+  })
+}
 
 export function normalizeError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
@@ -221,12 +282,16 @@ export const useAppStore = create<AppState>()(
     codexCategory: 'character',
     selectedPlotId: '',
     selectedEdgeId: '',
+    imageStudioEntityKind: '',
+    imageStudioEntityId: '',
+    imageQueue: [],
     sidebarOpen: true,
     inspectorOpen: true,
     inspectorTab: 'scene',
     focusMode: false,
     projectManagerOpen: false,
     settingsOpen: false,
+    settingsSection: 'general',
     commandPaletteOpen: false,
     snapshotsOpen: false,
     backupManagerOpen: false,
@@ -413,8 +478,9 @@ export const useAppStore = create<AppState>()(
           const first = list[0]
           if (first) state.selectedEntity = { kind: preferred, id: first.id }
         }
-        if (view === 'plots' && !state.selectedPlotId && state.project) {
-          state.selectedPlotId = state.project.plots[0]?.id || ''
+        if (view === 'plots') {
+          state.selectedPlotId = ''
+          state.selectedEdgeId = ''
         }
         if (view === 'write' && !state.selectedDocumentId && state.project) {
           state.selectedDocumentId = selectFallbackDocument(state.project)
@@ -468,6 +534,93 @@ export const useAppStore = create<AppState>()(
       })
     },
 
+    openImageStudioForEntity: (kind, id) => {
+      set((state) => {
+        state.imageStudioEntityKind = kind
+        state.imageStudioEntityId = id
+        state.view = 'images'
+      })
+    },
+
+    enqueueImageGeneration: (projectId, request) => {
+      const id = makeId('imagejob')
+      set((state) => {
+        state.imageQueue.push({
+          id,
+          projectId,
+          request,
+          status: 'queued',
+          error: '',
+          createdAt: nowIso()
+        })
+      })
+      startImageQueueWorker()
+      return id
+    },
+
+    updateImageQueueJob: (id, status, error = '', image, libraryEntry) => {
+      set((state) => {
+        const job = state.imageQueue.find((entry) => entry.id === id)
+        if (!job) return
+        job.status = status
+        job.error = error
+        if (status === 'completed') job.completedAt = nowIso()
+        if (status !== 'completed' || !image) return
+        if (libraryEntry) {
+          state.library = state.library.map((entry) => entry.id === libraryEntry.id ? libraryEntry : entry)
+        }
+        if (state.project?.id !== job.projectId) return
+
+        state.project.codexImages = state.project.codexImages || []
+        if (!state.project.codexImages.some((entry) => entry.id === image.id)) {
+          state.project.codexImages.unshift(image)
+        }
+        if (image.kind === 'cover') state.project.coverImage = image.url
+        if (image.entityKind === 'character' && image.kind === 'avatar') {
+          const character = state.project.characters.find((entry) => entry.id === image.entityId)
+          if (character) character.avatar = image.url
+        } else if (image.entityKind === 'location' && image.kind === 'location') {
+          const location = state.project.locations.find((entry) => entry.id === image.entityId)
+          if (location) location.image = image.url
+        } else if (image.entityKind === 'item' && image.kind === 'object') {
+          const item = state.project.items.find((entry) => entry.id === image.entityId)
+          if (item) item.image = image.url
+        }
+        setDirtyState(state)
+      })
+      if (status === 'completed') get().pushToast('Imagen generada y guardada en el proyecto.', 'success')
+      if (status === 'failed') get().pushToast(`Falló la generación de imagen: ${error}`, 'error')
+    },
+
+    removeImageQueueJob: (id) => {
+      set((state) => {
+        state.imageQueue = state.imageQueue.filter((job) => job.id !== id || job.status === 'processing')
+      })
+    },
+
+    cancelImageQueueJob: (id) => {
+      const job = get().imageQueue.find((entry) => entry.id === id)
+      if (!job || !['queued', 'processing'].includes(job.status)) return
+      set((state) => {
+        const queuedJob = state.imageQueue.find((entry) => entry.id === id)
+        if (queuedJob) queuedJob.status = 'cancelled'
+      })
+      if (job.status === 'processing') {
+        void window.novelcraft.cancelImageGeneration(id).catch((error: unknown) => {
+          get().pushToast(
+            `No se pudo detener la solicitud de imagen en el proveedor: ${normalizeError(error)}`,
+            'error'
+          )
+        })
+      }
+    },
+
+    clearFinishedImageJobs: () => {
+      set((state) => {
+        state.imageQueue = state.imageQueue.filter((job) => job.status === 'queued' || job.status === 'processing')
+      })
+    },
+
     selectPlot: (id) => {
       set((state) => {
         state.selectedPlotId = id
@@ -491,7 +644,10 @@ export const useAppStore = create<AppState>()(
         else state.inspectorOpen = true
       }),
     setProjectManagerOpen: (open) => set((state) => void (state.projectManagerOpen = open)),
-    setSettingsOpen: (open) => set((state) => void (state.settingsOpen = open)),
+    setSettingsOpen: (open, section) => set((state) => {
+      state.settingsOpen = open
+      if (section) state.settingsSection = section
+    }),
     setCommandPaletteOpen: (open) => set((state) => void (state.commandPaletteOpen = open)),
     setSnapshotsOpen: (open) => set((state) => void (state.snapshotsOpen = open)),
     setBackupManagerOpen: (open) => set((state) => void (state.backupManagerOpen = open)),
@@ -526,6 +682,19 @@ export const useAppStore = create<AppState>()(
         state.project.updatedAt = nowIso()
         setDirtyState(state)
       })
+    },
+
+    applyChapterReviewProposal: (proposal) => {
+      const project = get().project
+      if (!project) return false
+      const updatedProject = applyChapterReviewProposal(project, proposal)
+      updatedProject.updatedAt = nowIso()
+      set((state) => {
+        if (!state.project || state.project.id !== project.id) return
+        state.project = updatedProject
+        setDirtyState(state)
+      })
+      return true
     },
 
     updateNode: (id, patch) => {
@@ -926,6 +1095,28 @@ export const useAppStore = create<AppState>()(
         const plot = project.plots.find((entity) => entity.id === id)
         if (!plot) return
         Object.assign(plot, patch)
+        if (patch.sceneIds) {
+          const linkedScenes = new Set(patch.sceneIds)
+          for (const scene of Object.values(project.nodes)) {
+            if (scene.type !== 'scene') continue
+            const hasLink = scene.plotIds.includes(id)
+            if (linkedScenes.has(scene.id) && !hasLink) scene.plotIds.push(id)
+            else if (!linkedScenes.has(scene.id) && hasLink) {
+              scene.plotIds = scene.plotIds.filter((plotId) => plotId !== id)
+            }
+          }
+        }
+        if (patch.chapterIds) {
+          const linkedChapters = new Set(patch.chapterIds)
+          for (const chapter of Object.values(project.nodes)) {
+            if (chapter.type !== 'chapter') continue
+            const hasLink = chapter.plotIds.includes(id)
+            if (linkedChapters.has(chapter.id) && !hasLink) chapter.plotIds.push(id)
+            else if (!linkedChapters.has(chapter.id) && hasLink) {
+              chapter.plotIds = chapter.plotIds.filter((plotId) => plotId !== id)
+            }
+          }
+        }
         plot.updatedAt = nowIso()
       })
     },
@@ -1065,6 +1256,27 @@ export const useAppStore = create<AppState>()(
         state.revision = 0
         ensureSelectionAfterDelete(state, state.project as Draft<Project>)
         window.novelcraft.setWindowDirty(false)
+      })
+    },
+
+    addCodexImage: (image) => {
+      get().mutateProject((project) => {
+        project.codexImages = project.codexImages || []
+        project.codexImages.unshift(image)
+      })
+    },
+
+    updateCodexImage: (id, patch) => {
+      get().mutateProject((project) => {
+        const image = (project.codexImages || []).find((img) => img.id === id)
+        if (!image) return
+        Object.assign(image, patch)
+      })
+    },
+
+    deleteCodexImage: (id) => {
+      get().mutateProject((project) => {
+        project.codexImages = (project.codexImages || []).filter((img) => img.id !== id)
       })
     },
 

@@ -11,12 +11,55 @@ export type SceneStatus = 'idea' | 'outline' | 'draft' | 'revised' | 'final'
 export type PlotType = 'principal' | 'secundaria' | 'romance' | 'misterio' | 'conflicto' | 'tema'
 export type PlotStatus = 'latente' | 'activa' | 'resuelta' | 'abandonada'
 export type EntityKind = 'character' | 'location' | 'item'
-export type AppView = 'write' | 'codex' | 'plots' | 'publish'
+export type AppView = 'write' | 'codex' | 'plots' | 'publish' | 'images' | 'guide'
 export type ThemeMode = 'dark' | 'light' | 'sepia' | 'system'
 export type AccentColor = 'amber' | 'rose' | 'sage' | 'ocean' | 'violet' | 'graphite'
-export type AiProtocol = 'openai' | 'anthropic' | 'ollama'
+export type AiProtocol = 'openai' | 'anthropic' | 'ollama' | 'comfyui'
 export type AiCategory = 'cloud' | 'local'
 export type ImageGenStyle = 'auto' | 'illustration' | 'painting' | 'photo' | 'minimal'
+export type ImageKind = 'cover' | 'avatar' | 'object' | 'location' | 'pose' | 'memory'
+export type ImageSource = 'generated' | 'uploaded'
+
+export interface CodexImage {
+  id: ID
+  kind: ImageKind
+  title: string
+  prompt: string
+  url: string
+  source: ImageSource
+  entityKind: EntityKind | ''
+  entityId: ID | ''
+  tags?: string[]
+  aspect: 'square' | 'portrait' | 'landscape'
+  style: ImageGenStyle
+  width: number
+  height: number
+  createdAt: string
+}
+
+export interface ImageGenerateRequest {
+  providerId: ID
+  prompt: string
+  referenceImage?: string
+  requestId?: string
+  kind: ImageKind
+  aspect: 'square' | 'portrait' | 'landscape'
+  style: ImageGenStyle
+  width?: number
+  height?: number
+  entityKind: EntityKind | ''
+  entityId: ID | ''
+}
+
+export interface ImageQueueJob {
+  id: ID
+  projectId: ID
+  request: ImageGenerateRequest
+  status: 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  error: string
+  createdAt: string
+  completedAt?: string
+}
 
 export interface DocumentNode {
   id: ID
@@ -38,6 +81,8 @@ export interface DocumentNode {
   goal: string
   conflict: string
   outcome: string
+  dramaticTension?: string
+  writingPlan?: string
   storyDate: string
   storyTime: string
   tags: string[]
@@ -52,6 +97,8 @@ export interface Character {
   name: string
   role: string
   age: string
+  height?: string
+  weight?: string
   pronouns: string
   occupation: string
   appearance: string
@@ -123,6 +170,9 @@ export interface Plot {
   temporalStart: string
   temporalEnd: string
   characterIds: ID[]
+  locationIds: ID[]
+  itemIds: ID[]
+  chapterIds: ID[]
   sceneIds: ID[]
   tags: string[]
   position: { x: number; y: number }
@@ -137,6 +187,74 @@ export interface PlotEdge {
   label: string
   type: 'causa' | 'conflicto' | 'convergencia' | 'contrapunto'
 }
+
+export type ItemPossessionAction = 'acquisition' | 'loss' | 'transfer'
+
+export interface ItemPossessionEvent {
+  id: ID
+  itemId: ID
+  chapterId: ID
+  sceneId: ID
+  action: ItemPossessionAction
+  fromCharacterId: ID | ''
+  toCharacterId: ID | ''
+  summary: string
+  rationale: string
+  source: 'chapter-analysis'
+  createdAt: string
+}
+
+export interface ChapterPlotProposal {
+  id: string
+  type: 'plot'
+  chapterId: ID
+  action: 'create' | 'update'
+  plotId: ID | null
+  title: string
+  summary: string
+  plotType: PlotType
+  status: PlotStatus
+  sceneIds: ID[]
+  characterIds: ID[]
+  chapterIds: ID[]
+  locationIds: ID[]
+  itemIds: ID[]
+  premise: string
+  conflict: string
+  stakes: string
+  theme: string
+  resolution: string
+  conflictsWith: { plotId: ID; label: string }[]
+  rationale: string
+}
+
+export interface ChapterPossessionProposal {
+  id: string
+  type: 'possession'
+  chapterId: ID
+  action: ItemPossessionAction
+  itemId: ID
+  sceneId: ID
+  fromCharacterId: ID | ''
+  toCharacterId: ID | ''
+  summary: string
+  rationale: string
+}
+
+export interface ChapterPlotConnectionProposal {
+  id: string
+  type: 'plot-connection'
+  chapterId: ID
+  sourcePlotId: ID
+  targetPlotId: ID
+  label: string
+  rationale: string
+}
+
+export type ChapterReviewProposal =
+  | ChapterPlotProposal
+  | ChapterPossessionProposal
+  | ChapterPlotConnectionProposal
 
 export interface Project {
   schemaVersion: 1
@@ -160,7 +278,9 @@ export interface Project {
   items: WorldItem[]
   plots: Plot[]
   plotEdges: PlotEdge[]
+  itemPossessionEvents: ItemPossessionEvent[]
   trash: TrashEntry[]
+  codexImages: CodexImage[]
 }
 
 export interface TrashEntry {
@@ -201,6 +321,7 @@ export interface AiProvider {
   temperature: number
   maxTokens: number
   supportsImages?: boolean
+  supportsText?: boolean
 }
 
 export interface EditorSettings {
@@ -238,6 +359,13 @@ export interface CoverGenerateRequest {
   prompt: string
   width?: number
   height?: number
+}
+
+export type LocalComfyUiStatus = 'running' | 'starting' | 'stopped'
+
+export interface LocalComfyUiState {
+  status: LocalComfyUiStatus
+  error: string
 }
 
 export interface BackupSettings {
@@ -387,12 +515,17 @@ export interface NovelCraftApi {
   deleteSnapshot: (id: string, documentId: string, snapshotId: string) => Promise<void>
   getSettings: () => Promise<AppSettings>
   saveSettings: (settings: AppSettings) => Promise<AppSettings>
-  listModels: (providerId: string) => Promise<string[]>
+  listModels: (providerId: string, provider?: AiProvider) => Promise<string[]>
   testProvider: (providerId: string, provider?: AiProvider) => Promise<{ ok: boolean; message: string; models?: string[] }>
   aiChat: (request: AiRequest) => Promise<{ content: string }>
-  aiComplete: (request: Omit<AiRequest, 'requestId'>) => Promise<{ content: string }>
+  aiComplete: (request: Omit<AiRequest, 'requestId'> & { requestId?: string }) => Promise<{ content: string }>
   cancelAi: (requestId: string) => Promise<void>
   generateCover: (request: CoverGenerateRequest) => Promise<string>
+  generateImage: (request: ImageGenerateRequest, requestId?: string) => Promise<string>
+  cancelImageGeneration: (requestId: string) => Promise<void>
+  addGeneratedImageToProject: (projectId: string, image: CodexImage) => Promise<LibraryEntry>
+  getLocalComfyUiStatus: () => Promise<LocalComfyUiState>
+  startLocalComfyUi: () => Promise<LocalComfyUiState>
   onAiStream: (callback: (event: AiStreamEvent) => void) => () => void
   exportManuscript: (payload: ManuscriptExportPayload) => Promise<ExportResult>
   minimizeWindow: () => Promise<void>

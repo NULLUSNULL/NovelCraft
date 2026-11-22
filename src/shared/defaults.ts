@@ -40,6 +40,17 @@ export const DEFAULT_PROVIDERS: AiProvider[] = [
     model: 'claude-sonnet-4-5',
     temperature: 0.7,
     maxTokens: 2048
+  },
+  {
+    id: 'comfyui-local',
+    name: 'ComfyUI local',
+    protocol: 'comfyui',
+    category: 'local',
+    baseUrl: 'http://127.0.0.1:8188',
+    model: 'sd_xl_base_1.0.safetensors',
+    temperature: 0.7,
+    maxTokens: 2048,
+    supportsImages: true
   }
 ]
 
@@ -67,7 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     enabled: true,
     selectionActions: true,
     activeProviderId: 'ollama-local',
-    imageProviderId: '',
+    imageProviderId: 'comfyui-local',
     coverStyle: 'auto',
     includeManuscript: true,
     includeCodex: true,
@@ -159,5 +170,15 @@ export const LOCAL_PROVIDER_PRESETS: Omit<AiProvider, 'id'>[] = [
     model: 'claude-sonnet-4-5',
     temperature: 0.7,
     maxTokens: 2048
+  },
+  {
+    name: 'ComfyUI local',
+    protocol: 'comfyui',
+    category: 'local',
+    baseUrl: 'http://127.0.0.1:8188',
+    model: 'sd_xl_base_1.0.safetensors',
+    temperature: 0.7,
+    maxTokens: 2048,
+    supportsImages: true
   }
 ]

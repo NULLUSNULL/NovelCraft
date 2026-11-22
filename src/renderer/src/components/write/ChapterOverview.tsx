@@ -1,15 +1,28 @@
-import { ArrowRight, BookOpen, FilePlus2, MapPin, UsersRound } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowRight, BookOpen, FilePlus2, MapPin, Sparkles, UsersRound } from 'lucide-react'
 import type { DocumentNode } from '@shared/types'
 import { formatNumber, getChapterScenes, getStatusLabel, stripHtml } from '@shared/project'
 import { useAppStore } from '../../store/useAppStore'
+import { ChapterAnalysisReview } from './ChapterAnalysisReview'
 
 export function ChapterOverview({ chapter }: { chapter: DocumentNode }) {
   const project = useAppStore((state) => state.project)
+  const settings = useAppStore((state) => state.settings)
   const updateNode = useAppStore((state) => state.updateNode)
   const addScene = useAppStore((state) => state.addScene)
   const selectDocument = useAppStore((state) => state.selectDocument)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
   if (!project) return null
   const scenes = getChapterScenes(project, chapter.id)
+  const analysisProvider = settings.providers.find(
+    (provider) =>
+      provider.id === settings.ai.activeProviderId &&
+      provider.protocol !== 'comfyui' &&
+      provider.supportsText !== false
+  )
+  const possessionEvents = (project.itemPossessionEvents || [])
+    .filter((event) => event.chapterId === chapter.id)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
   const words = scenes.reduce((total, scene) => total + scene.wordCount, 0)
   const finalScenes = scenes.filter((scene) => scene.status === 'final').length
   const povs = Array.from(new Set(scenes.map((scene) => scene.pov).filter(Boolean)))
@@ -62,11 +75,27 @@ export function ChapterOverview({ chapter }: { chapter: DocumentNode }) {
             <div className="card-eyebrow">Outline</div>
             <h2>Escenas del capítulo</h2>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => addScene(chapter.id)}>
-            <FilePlus2 size={13} />
-            Nueva escena
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => setAnalysisOpen(true)}
+              disabled={!analysisProvider}
+              title={analysisProvider ? 'Analizar tramas y posesión de objetos del capítulo' : 'Configura un proveedor de texto activo en Ajustes > IA'}
+            >
+              <Sparkles size={13} />
+              Analizar capítulo
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={() => addScene(chapter.id)}>
+              <FilePlus2 size={13} />
+              Nueva escena
+            </button>
+          </div>
         </div>
+        {!analysisProvider && (
+          <p className="field-hint" style={{ marginTop: -10 }}>
+            Para analizar, configura un proveedor de texto activo en Ajustes → IA.
+          </p>
+        )}
 
         <div className="scene-card-list">
           {scenes.map((scene, index) => {
@@ -115,11 +144,50 @@ export function ChapterOverview({ chapter }: { chapter: DocumentNode }) {
           )}
         </div>
 
+        {possessionEvents.length > 0 && (
+          <section className="chapter-note" aria-label="Historial de posesión de objetos">
+            <strong>Historial de posesión aceptado</strong>
+            <div style={{ display: 'grid', gap: 8, marginTop: 10 }}>
+              {possessionEvents.map((event) => {
+                const item = project.items.find((entry) => entry.id === event.itemId)
+                const from = project.characters.find((entry) => entry.id === event.fromCharacterId)
+                const to = project.characters.find((entry) => entry.id === event.toCharacterId)
+                const scene = project.nodes[event.sceneId]
+                const eventLabel = event.action === 'acquisition'
+                  ? `${to?.name || 'Un personaje'} adquirió`
+                  : event.action === 'loss'
+                    ? `${from?.name || 'Un personaje'} perdió`
+                    : `${from?.name || 'Un personaje'} transfirió a ${to?.name || 'otro personaje'}`
+                return (
+                  <button
+                    key={event.id}
+                    type="button"
+                    className="text-link"
+                    onClick={() => scene && selectDocument(scene.id)}
+                    style={{ textAlign: 'left', overflowWrap: 'anywhere' }}
+                  >
+                    {eventLabel} «{item?.name || 'objeto'}» · {scene?.title || 'escena'}
+                    {event.summary ? ` — ${event.summary}` : ''}
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         <div className="chapter-note">
           <strong>Consejo de estructura</strong>
           <p>Un capítulo suele funcionar cuando cada escena cambia algo: una decisión, una revelación o una relación.</p>
         </div>
       </div>
+      {analysisOpen && analysisProvider && (
+        <ChapterAnalysisReview
+          project={project}
+          chapterId={chapter.id}
+          provider={analysisProvider}
+          onClose={() => setAnalysisOpen(false)}
+        />
+      )}
     </div>
   )
 }

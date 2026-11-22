@@ -1,6 +1,6 @@
 import type { AiMessage, AiProvider, AiRequest, AiStreamEvent } from '../shared/types'
 import { resolveProvider } from './settings'
-import { authHeaders, friendlyError, openAiUrl, parseError, trimTrailingSlash } from './http'
+import { authHeaders, friendlyError, openAiUrl, parseError, requireProviderApiKey, trimTrailingSlash } from './http'
 
 const controllers = new Map<string, AbortController>()
 
@@ -50,19 +50,6 @@ async function consumeNdjson(response: Response, onLine: (line: string) => void)
     for (const line of lines) if (line.trim()) onLine(line.trim())
   }
   if (buffer.trim()) onLine(buffer.trim())
-}
-
-function authHeaders(provider: AiProvider, anthropic = false): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (provider.apiKey) {
-    if (anthropic) {
-      headers['x-api-key'] = provider.apiKey
-      headers['anthropic-version'] = '2023-06-01'
-    } else {
-      headers.Authorization = `Bearer ${provider.apiKey}`
-    }
-  }
-  return headers
 }
 
 function openAiMessages(messages: AiMessage[]): AiMessage[] {
@@ -316,20 +303,35 @@ export async function aiComplete(
   providerId: string,
   messages: AiMessage[],
   temperature?: number,
-  maxTokens?: number
+  maxTokens?: number,
+  requestId?: string
 ): Promise<{ content: string }> {
-  const provider = await resolveProvider(providerId)
-  if (!provider) throw new Error('No hay un proveedor de IA configurado')
+  const controller = requestId ? new AbortController() : undefined
+  if (requestId && controller) controllers.set(requestId, controller)
+  let provider: AiProvider | null | undefined
   try {
+    provider = await resolveProvider(providerId)
+    if (!provider) throw new Error('No hay un proveedor de IA configurado')
+    if (controller?.signal.aborted) {
+      const error = new Error('La solicitud se canceló.')
+      error.name = 'AbortError'
+      throw error
+    }
+    requireProviderApiKey(provider)
     const content = await completeProvider(
       provider,
       messages,
       temperature ?? provider.temperature,
-      maxTokens ?? provider.maxTokens
+      maxTokens ?? provider.maxTokens,
+      controller?.signal
     )
     return { content }
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    if (!provider) throw error
     throw new Error(friendlyError(error, provider))
+  } finally {
+    if (requestId && controllers.get(requestId) === controller) controllers.delete(requestId)
   }
 }
 
@@ -345,6 +347,26 @@ export async function discoverModels(
   const provider = await resolveProvider(providerId, override)
   if (!provider) throw new Error('Proveedor no encontrado')
   try {
+    requireProviderApiKey(provider)
+    if (provider.protocol === 'comfyui') {
+      const base = new URL(provider.baseUrl)
+      if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password) {
+        throw new Error('La URL de ComfyUI debe usar HTTP o HTTPS y no puede incluir credenciales.')
+      }
+      const response = await fetch(new URL('/object_info/CheckpointLoaderSimple', base), {
+        headers: authHeaders(provider),
+        signal: AbortSignal.timeout(10_000),
+        redirect: 'error'
+      })
+      if (!response.ok) throw new Error(await parseError(response))
+      const data = (await response.json()) as {
+        CheckpointLoaderSimple?: {
+          input?: { required?: { ckpt_name?: [string[]] } }
+        }
+      }
+      const checkpoints = data.CheckpointLoaderSimple?.input?.required?.ckpt_name?.[0] || []
+      return checkpoints.length ? checkpoints : [provider.model]
+    }
     if (provider.protocol === 'ollama') {
       const response = await fetch(openAiUrl(provider.baseUrl, '/api/tags'), {
         headers: authHeaders(provider)

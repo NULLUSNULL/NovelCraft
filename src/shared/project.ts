@@ -75,6 +75,8 @@ export function createDocument(
     goal: '',
     conflict: '',
     outcome: '',
+    dramaticTension: '',
+    writingPlan: '',
     storyDate: '',
     storyTime: '',
     tags: [],
@@ -125,7 +127,9 @@ export function createProject(input: CreateProjectInput): Project {
     items: [],
     plots: [],
     plotEdges: [],
-    trash: []
+    itemPossessionEvents: [],
+    trash: [],
+    codexImages: []
   }
 }
 
@@ -134,6 +138,20 @@ const COVER_STYLE_PROMPTS: Record<string, string> = {
   painting: 'pintura al óleo expresiva con pinceladas visibles y claroscuro',
   photo: 'fotografía cinematográfica con grano de película 35 mm y luz natural',
   minimal: 'composición minimalista de alto contraste, formas simples y mucho espacio negativo'
+}
+
+export function randomCoverComposition(synopsis: string): string {
+  const directions = [
+    'usa un símbolo central tomado del conflicto principal, con una composición editorial de alto impacto',
+    'representa la atmósfera de la historia mediante un paisaje evocador y una pequeña figura a escala',
+    'contrapone dos elementos visuales que sugieran el dilema central de la historia',
+    'crea un primer plano simbólico con una iluminación dramática y un fondo narrativo sutil',
+    'sugiere el viaje de la historia con un umbral, camino o horizonte como foco de la composición',
+    'combina un objeto significativo con una silueta y una paleta inspirada en el tono de la historia'
+  ]
+  const direction = directions[Math.floor(Math.random() * directions.length)]
+  const inspiration = stripHtml(synopsis).slice(0, 320).trim()
+  return `Dirección visual elegida al azar: ${direction}.${inspiration ? ` Toma como inspiración la sinopsis: ${inspiration}` : ' Inventa una metáfora visual coherente con el título y el género.'}`
 }
 
 export function buildCoverPrompt(input: CoverPromptInput): string {
@@ -331,8 +349,17 @@ export function buildProjectContext(
         const metadata = [
           scene.status,
           scene.pov ? `POV: ${project.characters.find((c) => c.id === scene.pov)?.name || 'desconocido'}` : '',
+          scene.locationId ? `ubicación: ${project.locations.find((item) => item.id === scene.locationId)?.name || 'desconocida'}` : '',
+          scene.characterIds.length ? `personajes: ${scene.characterIds.map((id) => project.characters.find((c) => c.id === id)?.name).filter(Boolean).join(', ')}` : '',
+          scene.plotIds.length ? `tramas: ${scene.plotIds.map((id) => project.plots.find((plot) => plot.id === id)?.title).filter(Boolean).join(', ')}` : '',
+          scene.itemIds.length ? `ítems: ${scene.itemIds.map((id) => project.items.find((item) => item.id === id)?.name).filter(Boolean).join(', ')}` : '',
           scene.storyDate ? `fecha: ${scene.storyDate}` : '',
-          scene.summary ? `resumen: ${scene.summary}` : ''
+          scene.summary ? `resumen: ${scene.summary}` : '',
+          scene.goal ? `objetivo: ${scene.goal}` : '',
+          scene.conflict ? `conflicto: ${scene.conflict}` : '',
+          scene.outcome ? `resultado: ${scene.outcome}` : '',
+          scene.dramaticTension ? `tensión dramática: ${scene.dramaticTension}` : '',
+          scene.writingPlan ? `plan de escritura: ${scene.writingPlan}` : ''
         ]
           .filter(Boolean)
           .join(' · ')
@@ -399,8 +426,30 @@ export function buildProjectContext(
   if (selectedDocumentId && project.nodes[selectedDocumentId]) {
     const selected = project.nodes[selectedDocumentId]
     const chapter = selected.type === 'scene' ? project.nodes[selected.parentId] : undefined
+    const sceneDetails = selected.type === 'scene'
+      ? [
+          `POV: ${selected.pov ? project.characters.find((character) => character.id === selected.pov)?.name || 'No asignado' : 'No asignado'}`,
+          `Ubicación: ${selected.locationId ? project.locations.find((location) => location.id === selected.locationId)?.name || 'No asignada' : 'No asignada'}`,
+          `Personajes: ${selected.characterIds.map((id) => project.characters.find((character) => character.id === id)?.name).filter(Boolean).join(', ') || 'Ninguno'}`,
+          `Tramas: ${selected.plotIds.map((id) => project.plots.find((plot) => plot.id === id)?.title).filter(Boolean).join(', ') || 'Ninguna'}`,
+          `Ítems: ${selected.itemIds.map((id) => project.items.find((item) => item.id === id)?.name).filter(Boolean).join(', ') || 'Ninguno'}`,
+          `Objetivo: ${selected.goal || 'Sin definir'}`,
+          `Conflicto: ${selected.conflict || 'Sin definir'}`,
+          `Resultado: ${selected.outcome || 'Sin definir'}`,
+          `Tensión dramática: ${selected.dramaticTension || 'Sin definir'}`,
+          `Plan de escritura: ${selected.writingPlan || 'Sin definir'}`
+        ].join('\n')
+      : ''
+    const sceneReferenceIds = selected.type === 'scene'
+      ? [
+          `PERSONAJES: ${project.characters.map((character) => `${character.id}=${character.name}`).join(' | ') || 'ninguno'}`,
+          `UBICACIONES: ${project.locations.map((location) => `${location.id}=${location.name}`).join(' | ') || 'ninguna'}`,
+          `TRAMAS: ${project.plots.map((plot) => `${plot.id}=${plot.title}`).join(' | ') || 'ninguna'}`,
+          `ÍTEMS: ${project.items.map((item) => `${item.id}=${item.name}`).join(' | ') || 'ninguno'}`
+        ].join('\n')
+      : ''
     parts.push(
-      `DOCUMENTO ACTIVO: ${chapter ? `${chapter.title} / ` : ''}${selected.title}\nRESUMEN: ${selected.summary || '—'}\nCONTENIDO:\n${stripHtml(selected.content).slice(0, 12000) || '(vacío)'}`
+      `DOCUMENTO ACTIVO: ${chapter ? `${chapter.title} / ` : ''}${selected.title}\nRESUMEN: ${selected.summary || '—'}${sceneDetails ? `\nPLANIFICACIÓN DE ESCENA:\n${sceneDetails}\nIDs válidos para proponer asociaciones:\n${sceneReferenceIds}` : ''}\nCONTENIDO:\n${stripHtml(selected.content).slice(0, 12000) || '(vacío)'}`
     )
   }
 
@@ -841,6 +890,9 @@ export function createDemoProject(): Project {
     temporalStart: '2026-09-14',
     temporalEnd: '2026-09-21',
     characterIds: [characterValeria.id, characterInes.id],
+    locationIds: [locationCiudad.id, locationJardin.id],
+    itemIds: [itemReloj.id, itemMapa.id],
+    chapterIds: [chapter1.id, chapter2.id, chapter3.id],
     sceneIds: [scene1.id, scene3.id, scene4.id, scene6.id],
     tags: ['central', 'memoria'],
     position: { x: 160, y: 130 },
@@ -862,6 +914,9 @@ export function createDemoProject(): Project {
     temporalStart: '2019-10-02',
     temporalEnd: '2026-09-21',
     characterIds: [characterValeria.id, characterTomas.id],
+    locationIds: [locationCafe.id],
+    itemIds: [itemCuaderno.id],
+    chapterIds: [chapter1.id, chapter2.id, chapter3.id],
     sceneIds: [scene2.id, scene5.id, scene6.id],
     tags: ['romance', 'subtexto'],
     position: { x: 500, y: 330 },
@@ -883,6 +938,9 @@ export function createDemoProject(): Project {
     temporalStart: '1991-01-01',
     temporalEnd: '2026-09-21',
     characterIds: [characterInes.id, characterTomas.id],
+    locationIds: [locationCiudad.id],
+    itemIds: [itemReloj.id],
+    chapterIds: [chapter1.id, chapter2.id, chapter3.id],
     sceneIds: [scene3.id, scene5.id, scene6.id],
     tags: ['antagonista', 'tema'],
     position: { x: 840, y: 150 },
@@ -959,7 +1017,9 @@ export function createDemoProject(): Project {
     items: [itemReloj, itemMapa, itemCuaderno],
     plots: [plotMain, plotRomance, plotOrder],
     plotEdges: [edge1, edge2, edge3],
-    trash: []
+    itemPossessionEvents: [],
+    trash: [],
+    codexImages: []
   }
 }
 
@@ -967,18 +1027,36 @@ export function characterName(project: Project, id: ID): string {
   return project.characters.find((character) => character.id === id)?.name || 'Sin asignar'
 }
 
+function sceneMentionsName(scene: DocumentNode, name: string): boolean {
+  const normalizedName = name.trim()
+  if (!normalizedName) return false
+  const escapedName = normalizedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^\\p{L}\\p{N}_])${escapedName}(?=$|[^\\p{L}\\p{N}_])`, 'iu')
+    .test(stripHtml(scene.content))
+}
+
 export function scenesForCharacter(project: Project, characterId: ID): DocumentNode[] {
+  const character = project.characters.find((entry) => entry.id === characterId)
   return getManuscriptScenes(project).filter(
-    (scene) => scene.characterIds.includes(characterId) || scene.pov === characterId
+    (scene) =>
+      scene.characterIds.includes(characterId) ||
+      scene.pov === characterId ||
+      Boolean(character && sceneMentionsName(scene, character.name))
   )
 }
 
 export function scenesForLocation(project: Project, locationId: ID): DocumentNode[] {
-  return getManuscriptScenes(project).filter((scene) => scene.locationId === locationId)
+  const location = project.locations.find((entry) => entry.id === locationId)
+  return getManuscriptScenes(project).filter(
+    (scene) => scene.locationId === locationId || Boolean(location && sceneMentionsName(scene, location.name))
+  )
 }
 
 export function scenesForItem(project: Project, itemId: ID): DocumentNode[] {
-  return getManuscriptScenes(project).filter((scene) => scene.itemIds.includes(itemId))
+  const item = project.items.find((entry) => entry.id === itemId)
+  return getManuscriptScenes(project).filter(
+    (scene) => scene.itemIds.includes(itemId) || Boolean(item && sceneMentionsName(scene, item.name))
+  )
 }
 
 export function scenesForPlot(project: Project, plotId: ID): DocumentNode[] {

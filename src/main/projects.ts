@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type {
   BackupInfo,
+  CodexImage,
   ExportResult,
   LibraryEntry,
   Project,
@@ -149,6 +150,7 @@ export async function saveProject(input: Project): Promise<SaveResult> {
         })
         snapshotCount += 1
       }
+
     }
     await trimSnapshots(project.id, settings.backups.snapshotLimit)
   }
@@ -157,6 +159,39 @@ export async function saveProject(input: Project): Promise<SaveResult> {
   await upsertLibrary(project, nowIso())
   const backupCreated = await maybeAutoBackup(project.id, settings.backups.autoBackupMinutes, settings.backups.backupLimit)
   return { savedAt: project.updatedAt, snapshots: snapshotCount, backupCreated }
+}
+
+export async function addGeneratedImageToProject(projectId: string, image: CodexImage): Promise<LibraryEntry> {
+  assertSafeId(projectId)
+  if (!image.id || !/^[A-Za-z0-9_-]{3,160}$/.test(image.id)) throw new Error('Identificador de imagen no válido')
+  if (image.source !== 'generated' || !image.url.startsWith('data:image/')) {
+    throw new Error('La imagen generada no contiene un formato válido')
+  }
+  if (image.prompt.length > 20000 || image.url.length > 17_000_000) {
+    throw new Error('La imagen o el prompt superan el límite permitido')
+  }
+  const project = await readProject(projectId)
+  project.codexImages = Array.isArray(project.codexImages) ? project.codexImages : []
+  if (project.codexImages.some((existing) => existing.id === image.id)) {
+    throw new Error('Esta imagen ya está guardada en el proyecto')
+  }
+  project.codexImages.unshift(image)
+  if (image.kind === 'cover') project.coverImage = image.url
+  if (image.entityKind === 'character' && image.kind === 'avatar') {
+    const character = project.characters.find((entity) => entity.id === image.entityId)
+    if (character) character.avatar = image.url
+  } else if (image.entityKind === 'location' && image.kind === 'location') {
+    const location = project.locations.find((entity) => entity.id === image.entityId)
+    if (location) location.image = image.url
+  } else if (image.entityKind === 'item' && ['object', 'pose'].includes(image.kind)) {
+    const item = project.items.find((entity) => entity.id === image.entityId)
+    if (item) item.image = image.url
+  }
+  await saveProject(project)
+  const library = await readLibrary()
+  const entry = library.find((candidate) => candidate.id === projectId)
+  if (!entry) throw new Error('La imagen se guardó, pero el proyecto no aparece en la biblioteca')
+  return entry
 }
 
 function snapshotDir(projectId: string, documentId: string): string {

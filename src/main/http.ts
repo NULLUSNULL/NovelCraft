@@ -20,6 +20,12 @@ export function friendlyError(error: unknown, provider: AiProvider): string {
   return message
 }
 
+export function requireProviderApiKey(provider: AiProvider): void {
+  if (provider.category === 'cloud' && !provider.apiKey?.trim()) {
+    throw new Error(`Falta la clave API de «${provider.name}». Configúrala en Ajustes → IA y guarda los cambios.`)
+  }
+}
+
 export async function parseError(response: Response): Promise<string> {
   let detail = ''
   try {

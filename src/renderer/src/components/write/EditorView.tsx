@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import {
   ChevronRight,
@@ -6,6 +6,8 @@ import {
   Feather,
   FileText,
   Focus,
+  Menu,
+  X,
   History,
   MapPin,
   NotebookPen,
@@ -47,6 +49,16 @@ export function EditorView({ node }: { node: DocumentNode }) {
   const inspectorOpen = useAppStore((state) => state.inspectorOpen)
   const [editor, setEditor] = useState<Editor | null>(null)
   const [ai, setAi] = useState<AiInvocation | null>(null)
+  const [sceneGuideState, setSceneGuideState] = useState<'open' | 'minimized' | 'hidden'>(
+    (() => {
+      try {
+        const saved = localStorage.getItem('novelcraft-scene-guide-state')
+        return (saved as 'open' | 'minimized' | 'hidden') || 'open'
+      } catch {
+        return 'open'
+      }
+    })()
+  )
 
   const chapter = node.type === 'scene' ? project?.nodes[node.parentId] : undefined
   const wordCount = node.wordCount || 0
@@ -108,6 +120,16 @@ export function EditorView({ node }: { node: DocumentNode }) {
             >
               {inspectorOpen ? <PanelRightClose size={14} /> : <PanelRight size={14} />}
             </button>
+            {isScene && (
+              <button
+                className={`icon-btn sm ${sceneGuideState !== 'hidden' ? '' : 'btn-active'}`}
+                onClick={() => setSceneGuideState(sceneGuideState === 'hidden' ? 'open' : 'hidden')}
+                title={sceneGuideState === 'hidden' ? 'Mostrar guía de escritura' : 'Ocultar guía de escritura'}
+                aria-label={sceneGuideState === 'hidden' ? 'Mostrar guía de escritura' : 'Ocultar guía de escritura'}
+              >
+                <Menu size={14} />
+              </button>
+            )}
           </div>
         </div>
         <div className="doc-title-row">
@@ -171,6 +193,14 @@ export function EditorView({ node }: { node: DocumentNode }) {
         </div>
       </header>
 
+      {isScene && (
+        <SceneGuideFloat
+          node={node}
+          state={sceneGuideState}
+          setState={setSceneGuideState}
+        />
+      )}
+
       <div className="editor-scroll">
         <RichEditor
           key={node.id}
@@ -220,6 +250,223 @@ export function EditorView({ node }: { node: DocumentNode }) {
           editor={editor}
           onClose={() => setAi(null)}
         />
+      )}
+    </div>
+  )
+}
+
+type SceneGuideState = 'open' | 'minimized' | 'hidden'
+
+function SceneGuideFloat({
+  node,
+  state,
+  setState,
+}: {
+  node: DocumentNode
+  state: SceneGuideState
+  setState: (next: SceneGuideState) => void
+}) {
+  const updateNode = useAppStore((storeState) => storeState.updateNode)
+
+  const saveState = (next: SceneGuideState) => {
+    setState(next)
+    try {
+      localStorage.setItem('novelcraft-scene-guide-state', next)
+    } catch {
+      // ignore
+    }
+  }
+
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(
+    (() => {
+      try {
+        const saved = localStorage.getItem('novelcraft-scene-guide-position')
+        if (saved) return JSON.parse(saved)
+      } catch {
+        // ignore
+      }
+      return null
+    })()
+  )
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState<{
+    clientX: number
+    clientY: number
+    offsetX: number
+    offsetY: number
+  } | null>(null)
+
+  const x = position?.x ?? 24
+  const y = position?.y ?? 24
+
+  const handleDragStart = (event: React.MouseEvent) => {
+    event.preventDefault()
+    setIsDragging(true)
+    setDragStart({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      offsetX: x,
+      offsetY: y,
+    })
+  }
+
+  const handleDragMove = useCallback(
+    (event: MouseEvent) => {
+      if (!isDragging || !dragStart) return
+      const dx = event.clientX - dragStart.clientX
+      const dy = event.clientY - dragStart.clientY
+      const nextX = dragStart.offsetX + dx
+      const nextY = dragStart.offsetY + dy
+      setPosition({ x: nextX, y: nextY })
+      try {
+        localStorage.setItem(
+          'novelcraft-scene-guide-position',
+          JSON.stringify({ x: nextX, y: nextY })
+        )
+      } catch {
+        // ignore
+      }
+    },
+    [isDragging, dragStart]
+  )
+
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false)
+    setDragStart(null)
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleDragMove)
+    window.addEventListener('mouseup', handleDragEnd)
+    return () => {
+      window.removeEventListener('mousemove', handleDragMove)
+      window.removeEventListener('mouseup', handleDragEnd)
+    }
+  }, [handleDragMove, handleDragEnd])
+
+  return (
+    <div
+      className="scene-guide-float"
+      data-state={state}
+      style={{
+        transform: `translate(${x}px, ${y}px)`,
+        transition: isDragging ? 'none' : '0.2s ease',
+      }}
+    >
+      {state === 'open' && (
+        <section className="scene-guide-panel">
+          <div
+            className="scene-guide-head"
+            onMouseDown={handleDragStart}
+            style={{ cursor: isDragging ? 'grabbing' : 'move' }}
+          >
+            <h3>Guía de escena</h3>
+            <div className="scene-guide-actions">
+              <button
+                type="button"
+                className="icon-btn sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  saveState('minimized')
+                }}
+                title="Minimizar guía"
+              >
+                <Menu size={12} />
+              </button>
+              <button
+                type="button"
+                className="icon-btn sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  saveState('hidden')
+                }}
+                title="Ocultar guía"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+          <div className="scene-guide-body">
+            <div className="guide-field">
+              <label className="guide-label">Tensión dramática</label>
+              <textarea
+                className="textarea"
+                value={node.dramaticTension || ''}
+                onChange={(event) =>
+                  updateNode(node.id, { dramaticTension: event.target.value })
+                }
+                rows={2}
+                placeholder="¿Qué está en juego en esta escena? ¿Qué teme el personaje?"
+              />
+            </div>
+            <div className="guide-field">
+              <label className="guide-label">Objetivo</label>
+              <textarea
+                className="textarea"
+                value={node.goal || ''}
+                onChange={(event) => updateNode(node.id, { goal: event.target.value })}
+                rows={2}
+                placeholder="¿Qué quiere lograr el personaje en esta escena?"
+              />
+            </div>
+            <div className="guide-field">
+              <label className="guide-label">Conflicto</label>
+              <textarea
+                className="textarea"
+                value={node.conflict || ''}
+                onChange={(event) => updateNode(node.id, { conflict: event.target.value })}
+                rows={2}
+                placeholder="¿Qué se interpone entre el personaje y su objetivo?"
+              />
+            </div>
+            <div className="guide-field">
+              <label className="guide-label">Resultado</label>
+              <textarea
+                className="textarea"
+                value={node.outcome || ''}
+                onChange={(event) => updateNode(node.id, { outcome: event.target.value })}
+                rows={2}
+                placeholder="¿Qué sucede al final de la escena?"
+              />
+            </div>
+            <div className="guide-field">
+              <label className="guide-label">Esquema de escritura</label>
+              <textarea
+                className="textarea"
+                value={node.writingPlan || ''}
+                onChange={(event) => updateNode(node.id, { writingPlan: event.target.value })}
+                rows={3}
+                placeholder="Pasos o momentos clave que seguirás al escribir esta escena."
+              />
+            </div>
+          </div>
+        </section>
+      )}
+      {state === 'minimized' && (
+        <button
+          type="button"
+          className="scene-guide-minimized"
+          onClick={(e) => {
+            e.stopPropagation()
+            saveState('open')
+          }}
+          title="Mostrar guía de escena"
+        >
+          <Menu size={14} />
+        </button>
+      )}
+      {state === 'hidden' && (
+        <button
+          type="button"
+          className="scene-guide-restore"
+          onClick={(e) => {
+            e.stopPropagation()
+            saveState('open')
+          }}
+          title="Mostrar guía de escena"
+        >
+          <Menu size={10} />
+        </button>
       )}
     </div>
   )

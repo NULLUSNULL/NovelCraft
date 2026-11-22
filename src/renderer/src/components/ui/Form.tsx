@@ -7,10 +7,11 @@ import {
   type ReactNode
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, ChevronDown, ImagePlus, Plus, Search, Trash2, X } from 'lucide-react'
-import { initials } from '@shared/project'
+import { Check, ChevronDown, ImagePlus, Loader2, Plus, Search, Sparkles, Trash2, X } from 'lucide-react'
+import { buildCoverPrompt, initials, randomCoverComposition } from '@shared/project'
 import { useAppStore } from '../../store/useAppStore'
 import { AppIcon } from '../AppIcon'
+import { Modal } from './Modal'
 
 export function Field({
   label,
@@ -252,13 +253,15 @@ export function ImageUpload({
   onChange,
   name,
   round = false,
-  size = 76
+  size = 76,
+  compact = false
 }: {
   value: string
   onChange: (value: string) => void
   name: string
   round?: boolean
   size?: number
+  compact?: boolean
 }) {
   const pushToast = useAppStore((state) => state.pushToast)
   const handleFile = (event: ChangeEvent<HTMLInputElement>): void => {
@@ -271,6 +274,15 @@ export function ImageUpload({
     const reader = new FileReader()
     reader.onload = () => onChange(String(reader.result || ''))
     reader.readAsDataURL(file)
+  }
+  if (compact) {
+    return (
+      <label className="image-upload-compact" title={value ? 'Cambiar imagen' : 'Subir imagen'}>
+        <input type="file" accept="image/*" onChange={handleFile} />
+        {value ? <img src={value} alt={`Imagen seleccionada: ${name}`} /> : <ImagePlus size={14} />}
+        <span>{value ? 'Cambiar' : 'Subir imagen'}</span>
+      </label>
+    )
   }
   return (
     <div
@@ -327,6 +339,9 @@ export function CoverUpload({
   color,
   title,
   author,
+  genre = '',
+  synopsis = '',
+  description = '',
   onChange,
   width = 154,
   height = 218,
@@ -337,6 +352,9 @@ export function CoverUpload({
   color: string
   title: string
   author: string
+  genre?: string
+  synopsis?: string
+  description?: string
   onChange: (value: string) => void
   width?: number
   height?: number
@@ -344,6 +362,48 @@ export function CoverUpload({
   className?: string
 }) {
   const pushToast = useAppStore((state) => state.pushToast)
+  const settings = useAppStore((state) => state.settings)
+  const [generateOpen, setGenerateOpen] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [generationPrompt, setGenerationPrompt] = useState('')
+  const providerId = settings.ai.imageProviderId || settings.ai.activeProviderId
+  const provider = settings.providers.find((candidate) => candidate.id === providerId)
+  const canGenerate = Boolean(provider && (provider.supportsImages || provider.protocol === 'comfyui'))
+
+  const generate = async (): Promise<void> => {
+    if (!provider || !canGenerate) {
+      pushToast('Selecciona un proveedor de imágenes en Ajustes → IA.', 'error')
+      return
+    }
+    setGenerating(true)
+    try {
+      const prompt = buildCoverPrompt({
+        title,
+        genre,
+        synopsis,
+        description: [
+          description,
+          generationPrompt.trim() || randomCoverComposition(synopsis)
+        ].filter(Boolean).join('\n'),
+        style: settings.ai.coverStyle
+      })
+      const image = await window.novelcraft.generateCover({
+        providerId: provider.id,
+        prompt,
+        width: 1024,
+        height: 1536
+      })
+      onChange(image)
+      setGenerateOpen(false)
+      setGenerationPrompt('')
+      pushToast('Portada generada y asociada al proyecto.', 'success')
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
   const handleFile = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -363,35 +423,94 @@ export function CoverUpload({
     }
   }
   return (
-    <div
-      className={`cover-upload ${compact ? 'compact' : ''} ${className}`}
-      style={{ width, height, background: value ? undefined : color }}
-    >
-      {value ? (
-        <img className="cover-upload-image" src={value} alt={`Portada de ${title || 'la novela'}`} />
-      ) : (
-        <div className="cover-upload-fallback">
-          <AppIcon className="cover-upload-mark" />
-          {!compact && <strong>{title || 'Tu novela'}</strong>}
-          {!compact && <small>{author || 'Autor/a'}</small>}
+    <>
+      <div className={`cover-editor ${compact ? 'compact' : ''}`}>
+        <div
+          className={`cover-upload ${compact ? 'compact' : ''} ${className}`}
+          style={{ width, height, background: value ? undefined : color }}
+        >
+          {value ? (
+            <img className="cover-upload-image" src={value} alt={`Portada de ${title || 'la novela'}`} />
+          ) : (
+            <div className="cover-upload-fallback">
+              <AppIcon className="cover-upload-mark" />
+              {!compact && <strong>{title || 'Tu novela'}</strong>}
+              {!compact && <small>{author || 'Autor/a'}</small>}
+            </div>
+          )}
+          <label className="cover-upload-overlay" title={value ? 'Cambiar foto de portada' : 'Subir foto de portada'}>
+            <input type="file" accept="image/*" onChange={(event) => void handleFile(event)} />
+            <ImagePlus size={compact ? 13 : 16} />
+            {!compact && <span>{value ? 'Cambiar foto' : 'Subir foto'}</span>}
+          </label>
+          {value && (
+            <button
+              type="button"
+              className="image-remove cover-remove"
+              onClick={() => onChange('')}
+              title="Quitar foto de portada"
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
         </div>
-      )}
-      <label className="cover-upload-overlay" title={value ? 'Cambiar foto de portada' : 'Subir foto de portada'}>
-        <input type="file" accept="image/*" onChange={(event) => void handleFile(event)} />
-        <ImagePlus size={compact ? 13 : 16} />
-        {!compact && <span>{value ? 'Cambiar foto' : 'Subir foto'}</span>}
-      </label>
-      {value && (
         <button
           type="button"
-          className="image-remove cover-remove"
-          onClick={() => onChange('')}
-          title="Quitar foto de portada"
+          className={`btn cover-generate-button ${compact ? 'compact' : ''}`}
+          onClick={() => setGenerateOpen(true)}
+          title="Generar portada con IA"
+          aria-label="Generar portada con IA"
         >
-          <Trash2 size={12} />
+          <Sparkles size={compact ? 13 : 12} />
+          {!compact && 'Generar con IA'}
         </button>
-      )}
-    </div>
+      </div>
+      <Modal
+        open={generateOpen}
+        onClose={() => {
+          if (!generating) setGenerateOpen(false)
+        }}
+        eyebrow="Portada del proyecto"
+        title="Generar portada con IA"
+        subtitle="La imagen generada se asociará directamente a la portada."
+        size="md"
+        closeOnBackdrop={!generating}
+        footer={
+          <>
+            <button className="btn" type="button" onClick={() => setGenerateOpen(false)} disabled={generating}>
+              Cancelar
+            </button>
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => void generate()}
+              disabled={generating || !canGenerate}
+            >
+              {generating ? <Loader2 size={13} /> : <Sparkles size={13} />}
+              {generating ? 'Generando…' : 'Generar y asociar'}
+            </button>
+          </>
+        }
+      >
+        <Field
+          label="Detalles para la ilustración"
+          hint="El título, género y sinopsis siempre se incluyen. Si dejas este campo vacío, se elegirá una composición aleatoria inspirada en la sinopsis."
+        >
+          <textarea
+            className="textarea"
+            rows={4}
+            value={generationPrompt}
+            onChange={(event) => setGenerationPrompt(event.target.value)}
+            placeholder="Añade personajes, ambiente, símbolos o colores que quieras destacar…"
+            disabled={generating}
+            autoFocus
+          />
+        </Field>
+        {!canGenerate && (
+          <p className="field-hint">Configura un proveedor compatible con generación de imágenes en Ajustes → IA.</p>
+        )}
+      </Modal>
+    </>
   )
 }
 

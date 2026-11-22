@@ -18,7 +18,9 @@ export function Sidebar() {
     write: { eyebrow: 'Manuscrito', title: 'Estructura', sub: 'Planifica capítulos y escenas' },
     codex: { eyebrow: 'Enciclopedia', title: 'Codex', sub: 'El mundo de tu novela' },
     plots: { eyebrow: 'Narrativa', title: 'Tramas', sub: 'Conexiones y temporalidad' },
-    publish: { eyebrow: 'Salida', title: 'Publicar', sub: 'Compila y exporta tu obra' }
+    publish: { eyebrow: 'Salida', title: 'Publicar', sub: 'Compila y exporta tu obra' },
+    images: { eyebrow: 'Estudio', title: 'Imágenes', sub: 'Portadas, avatares y recuerdos' },
+    guide: { eyebrow: 'Guía', title: 'Guía de Escritura', sub: 'Recursos y consejos para tu narrativa' }
   }[view]
 
   return (

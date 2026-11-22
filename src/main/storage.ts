@@ -136,7 +136,21 @@ export function validateProject(value: unknown): Project {
   if (!Array.isArray(project.items)) project.items = []
   if (!Array.isArray(project.plots)) project.plots = []
   if (!Array.isArray(project.plotEdges)) project.plotEdges = []
+  for (const plot of project.plots) {
+    if (!Array.isArray(plot.characterIds)) plot.characterIds = []
+    if (!Array.isArray(plot.sceneIds)) plot.sceneIds = []
+    if (!Array.isArray(plot.locationIds)) plot.locationIds = []
+    if (!Array.isArray(plot.itemIds)) plot.itemIds = []
+    if (!Array.isArray(plot.chapterIds)) {
+      plot.chapterIds = [...new Set(plot.sceneIds
+        .map((sceneId) => project.nodes[sceneId])
+        .filter((node) => node?.type === 'scene')
+        .map((scene) => scene.parentId))]
+    }
+  }
+  if (!Array.isArray(project.itemPossessionEvents)) project.itemPossessionEvents = []
   if (!Array.isArray(project.trash)) project.trash = []
+  if (!Array.isArray(project.codexImages)) project.codexImages = []
   if (!project.schemaVersion) project.schemaVersion = 1
   return project
 }

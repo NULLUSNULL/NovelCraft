@@ -59,9 +59,9 @@ export function PlotsSidebar() {
                 <span className="plot-meta">
                   <span>{TYPE_LABEL[plot.type]}</span>
                   <span>·</span>
-                  <span>{plot.status}</span>
+                  <span className={`plot-status-tag ${plot.status}`}>{plot.status}</span>
                   <span>·</span>
-                  <span>{plot.sceneIds.length} escenas</span>
+                  <span>{plot.sceneIds.length || plot.chapterIds?.length || 0} escenas/capítulos</span>
                 </span>
               </span>
             </button>

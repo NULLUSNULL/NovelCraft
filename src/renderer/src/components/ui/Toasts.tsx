@@ -1,10 +1,11 @@
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { useAppStore } from '../../store/useAppStore'
 
 export function Toasts() {
   const toasts = useAppStore((state) => state.toasts)
   const dismiss = useAppStore((state) => state.dismissToast)
-  return (
+  return createPortal(
     <div className="toasts">
       {toasts.map((toast) => (
         <div className={`toast ${toast.tone}`} key={toast.id}>
@@ -17,6 +18,7 @@ export function Toasts() {
           </button>
         </div>
       ))}
-    </div>
+    </div>,
+    document.body
   )
 }

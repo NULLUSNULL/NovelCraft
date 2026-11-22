@@ -29,6 +29,9 @@ export function PublishSidebar() {
             color={project.coverColor}
             title={project.title}
             author={project.author}
+            genre={project.genre}
+            synopsis={project.synopsis}
+            description={project.description}
             width={48}
             height={65}
             onChange={(coverImage) => updateProjectMeta({ coverImage })}

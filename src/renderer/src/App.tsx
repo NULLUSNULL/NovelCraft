@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { AlertTriangle, Feather, Loader2 } from 'lucide-react'
+import { AlertTriangle, Feather, Loader2, Sparkles } from 'lucide-react'
 import { useAppStore } from './store/useAppStore'
 import {
   useAutoSave,
@@ -16,6 +16,8 @@ import { WriteView } from './components/write/WriteView'
 import { CodexView } from './components/codex/CodexView'
 import { PlotsView } from './components/plots/PlotsView'
 import { PublishView } from './components/publish/PublishView'
+import { ImageStudioView } from './components/images/ImageStudioView'
+import { WritingGuideView } from './components/write/WritingGuideView'
 import { ProjectManager } from './components/project/ProjectManager'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { CommandPalette } from './components/commands/CommandPalette'
@@ -70,12 +72,13 @@ export default function App() {
     document.title = project ? `${project.title} — NovelCraft` : 'NovelCraft'
   }, [project])
 
-  const showSidebar = Boolean(project) && sidebarOpen && !focusMode
+  const showSidebar =
+    Boolean(project) && sidebarOpen && !focusMode && view !== 'images'
   const showInspector =
     Boolean(project) &&
     inspectorOpen &&
     !focusMode &&
-    (view === 'write' || (view !== 'plots' && inspectorTab === 'ai'))
+    (view === 'write' || (view !== 'images' && inspectorTab === 'ai'))
 
   if (!booted) {
     return (
@@ -133,10 +136,22 @@ export default function App() {
                 {view === 'codex' && <CodexView />}
                 {view === 'plots' && <PlotsView />}
                 {view === 'publish' && <PublishView />}
+                {view === 'images' && <ImageStudioView />}
+                {view === 'guide' && <WritingGuideView />}
               </div>
             )}
           </div>
           {showInspector && <Inspector />}
+          {project && !inspectorOpen && inspectorTab === 'ai' && view !== 'write' && view !== 'plots' && view !== 'images' && !focusMode && (
+            <button
+              className="assistant-restore"
+              onClick={() => setInspectorOpen(true)}
+              aria-label="Mostrar asistente literario"
+            >
+              <Sparkles size={14} />
+              Asistente
+            </button>
+          )}
           {showInspector && <button className="inspector-backdrop" onClick={() => setInspectorOpen(false)} aria-label="Cerrar inspector" />}
         </main>
       </div>

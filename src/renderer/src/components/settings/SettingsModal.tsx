@@ -11,6 +11,7 @@ import {
   EyeOff,
   Feather,
   HardDrive,
+  ImagePlus,
   Info,
   KeyRound,
   Laptop,
@@ -70,6 +71,41 @@ function makeProvider(presetIndex = 0): AiProvider {
   }
 }
 
+function makeOnlineImageProvider(): AiProvider {
+  return {
+    id: `provider_${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
+    name: 'OpenAI Images',
+    protocol: 'openai',
+    category: 'cloud',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-image-1',
+    temperature: 0.7,
+    maxTokens: 2048,
+    supportsImages: true,
+    supportsText: false,
+    apiKey: '',
+    hasApiKey: false,
+    clearApiKey: false
+  }
+}
+
+function makeOnlineTextProvider(): AiProvider {
+  return {
+    id: `provider_${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
+    name: 'OpenAI Text',
+    protocol: 'openai',
+    category: 'cloud',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4.1-mini',
+    temperature: 0.7,
+    maxTokens: 2048,
+    supportsText: true,
+    apiKey: '',
+    hasApiKey: false,
+    clearApiKey: false
+  }
+}
+
 function ProviderPanel({
   provider,
   onNotify
@@ -111,10 +147,13 @@ function ProviderPanel({
   const discover = async (): Promise<void> => {
     setModelsLoading(true)
     try {
-      const result = await window.novelcraft.listModels(provider.id)
+      const result = await window.novelcraft.listModels(provider.id, provider)
       setModels(result)
       if (!result.length) onNotify('El proveedor no devolvió modelos. Revisa la URL y la conexión.', 'info')
-      else if (!result.includes(provider.model)) patch({ model: result[0] })
+      else if (!provider.supportsImages && !result.includes(provider.model)) patch({ model: result[0] })
+      else if (provider.supportsImages && !result.includes(provider.model)) {
+        onNotify('Conexión correcta. Escribe el identificador de un modelo de imágenes compatible en el campo Modelo.', 'info')
+      }
       else onNotify(`${result.length} modelos disponibles.`, 'success')
     } catch (error) {
       onNotify(error instanceof Error ? error.message : String(error), 'error')
@@ -159,6 +198,7 @@ function ProviderPanel({
             <option value="openai">OpenAI compatible</option>
             <option value="anthropic">Anthropic</option>
             <option value="ollama">Ollama</option>
+            <option value="comfyui">ComfyUI</option>
           </select>
         </Field>
         <Field label="Entorno">
@@ -190,6 +230,16 @@ function ProviderPanel({
               </button>
             ))}
           </div>
+        )}
+        {provider.protocol === 'comfyui' && (
+          <span className="field-hint">
+            Escribe o detecta el nombre exacto de un checkpoint instalado en el servidor (por ejemplo, sd_xl_base_1.0.safetensors).
+          </span>
+        )}
+        {provider.supportsImages && provider.protocol === 'openai' && (
+          <span className="field-hint">
+            Para OpenAI Images usa un modelo habilitado en tu cuenta, como gpt-image-1. Los modelos y costes dependen del servicio y de tu plan.
+          </span>
         )}
       </Field>
       {provider.category === 'cloud' && (
@@ -244,18 +294,20 @@ function ProviderPanel({
           />
         </Field>
       </div>
-      <div className="provider-use-row">
-        <div>
-          <strong>Usar este proveedor</strong>
-          <span>El asistente y las acciones de escritura usarán este modelo.</span>
+      {provider.supportsText !== false && (
+        <div className="provider-use-row">
+          <div>
+            <strong>Usar este proveedor</strong>
+            <span>El asistente y las acciones de escritura usarán este modelo.</span>
+          </div>
+          <Switch
+            checked={settings.ai.activeProviderId === provider.id}
+            onChange={(checked) => {
+              if (checked) updateSettings((draft) => { draft.ai.activeProviderId = provider.id })
+            }}
+          />
         </div>
-        <Switch
-          checked={settings.ai.activeProviderId === provider.id}
-          onChange={(checked) => {
-            if (checked) updateSettings((draft) => { draft.ai.activeProviderId = provider.id })
-          }}
-        />
-      </div>
+      )}
       <div className="provider-use-row">
         <div>
           <strong>Genera imágenes</strong>
@@ -295,6 +347,7 @@ function ProviderPanel({
 export function SettingsModal() {
   const open = useAppStore((state) => state.settingsOpen)
   const setOpen = useAppStore((state) => state.setSettingsOpen)
+  const settingsSection = useAppStore((state) => state.settingsSection)
   const settings = useAppStore((state) => state.settings)
   const project = useAppStore((state) => state.project)
   const updateSettings = useAppStore((state) => state.updateSettings)
@@ -307,6 +360,11 @@ export function SettingsModal() {
   const [tab, setTab] = useState<SettingsTab>('general')
   const [guideOpen, setGuideOpen] = useState(false)
   const [selectedProvider, setSelectedProvider] = useState(settings.ai.activeProviderId)
+
+  useEffect(() => {
+    if (!open) return
+    setTab(settingsSection)
+  }, [open, settingsSection])
 
   useEffect(() => {
     if (!open) return
@@ -328,6 +386,26 @@ export function SettingsModal() {
     useAppStore.getState().replaceProvider(provider)
     setSelectedProvider(provider.id)
     useAppStore.getState().pushToast('Proveedor añadido. Configura sus datos.', 'info')
+  }
+
+  const addOnlineImageProvider = (): void => {
+    const provider = makeOnlineImageProvider()
+    useAppStore.getState().replaceProvider(provider)
+    updateSettings((draft) => {
+      draft.ai.imageProviderId = provider.id
+    })
+    setSelectedProvider(provider.id)
+    useAppStore.getState().pushToast('Generador online añadido. Introduce una clave API válida y guarda los ajustes.', 'info')
+  }
+
+  const addOnlineTextProvider = (): void => {
+    const provider = makeOnlineTextProvider()
+    useAppStore.getState().replaceProvider(provider)
+    updateSettings((draft) => {
+      draft.ai.activeProviderId = provider.id
+    })
+    setSelectedProvider(provider.id)
+    useAppStore.getState().pushToast('Proveedor de texto online añadido. Introduce una clave API válida y guarda los ajustes.', 'info')
   }
 
   return (
@@ -596,6 +674,9 @@ export function SettingsModal() {
               </section>
               <section className="settings-section">
                 <div className="settings-section-title">Portadas con IA</div>
+                <p className="settings-help">
+                  Puedes usar ComfyUI local o una API online compatible con OpenAI Images. El proveedor online requiere una clave API propia y puede tener costes según su servicio.
+                </p>
                 <div className="field-row">
                   <Field label="Proveedor de imágenes para portadas" hint="Se usa con el botón «Generar con IA» al crear o editar un proyecto.">
                     <select
@@ -604,11 +685,17 @@ export function SettingsModal() {
                       onChange={(event) => updateSettings((draft) => { draft.ai.imageProviderId = event.target.value })}
                     >
                       <option value="">Automático (proveedor activo)</option>
-                      {settings.providers.map((provider) => (
-                        <option key={provider.id} value={provider.id}>
-                          {provider.name} · {provider.model || 'sin modelo'}{provider.supportsImages ? '' : ' (sin marcar para imágenes)'}
-                        </option>
-                      ))}
+                      {settings.providers
+                        .filter((provider) =>
+                          provider.supportsImages ||
+                          provider.protocol === 'comfyui' ||
+                          provider.id === settings.ai.imageProviderId
+                        )
+                        .map((provider) => (
+                          <option key={provider.id} value={provider.id}>
+                            {provider.name} · {provider.model || 'sin modelo'}
+                          </option>
+                        ))}
                     </select>
                   </Field>
                   <Field label="Estilo de portada" hint="Orienta el prompt que se envía al generador de imágenes.">
@@ -629,7 +716,15 @@ export function SettingsModal() {
               <section className="settings-section ai-providers-section">
                 <div className="settings-section-title-row">
                   <div className="settings-section-title">Proveedores</div>
-                  <button className="btn sm" onClick={addProvider}><Plus size={12} />Añadir</button>
+                  <div className="row">
+                    <button className="btn sm" onClick={addOnlineImageProvider}>
+                      <ImagePlus size={12} /> Añadir generador online
+                    </button>
+                    <button className="btn sm" onClick={addOnlineTextProvider}>
+                      <Sparkles size={12} /> Añadir texto online
+                    </button>
+                    <button className="btn sm" onClick={addProvider}><Plus size={12} />Añadir</button>
+                  </div>
                 </div>
                 <div className="provider-layout">
                   <div className="provider-list">

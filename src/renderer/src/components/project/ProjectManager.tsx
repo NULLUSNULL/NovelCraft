@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowRight,
+  ArrowLeft,
   BookOpen,
   CalendarDays,
   Check,
@@ -16,6 +17,7 @@ import {
   Plus,
   Save,
   Search,
+  Settings,
   Sparkles,
   Square,
   Trash2,
@@ -202,6 +204,9 @@ export function ProjectForm({
             color={form.coverColor}
             title={form.title}
             author={form.author}
+            genre={form.genre}
+            synopsis={form.synopsis}
+            description={form.description}
             onChange={(coverImage) => patch({ coverImage })}
           />
           <div className="cover-color-row">
@@ -272,6 +277,7 @@ export function ProjectManager() {
   const appInfo = useAppStore((state) => state.appInfo)
   const bootError = useAppStore((state) => state.bootError)
   const setOpen = useAppStore((state) => state.setProjectManagerOpen)
+  const setSettingsOpen = useAppStore((state) => state.setSettingsOpen)
   const openProjectById = useAppStore((state) => state.openProjectById)
   const deleteProjectById = useAppStore((state) => state.deleteProjectById)
   const importProject = useAppStore((state) => state.importProject)
@@ -366,6 +372,12 @@ export function ProjectManager() {
       <div className="project-manager-glow" />
       <header className="library-header">
         <div className="library-brand">
+          {canClose && (
+            <button type="button" className="library-back" onClick={() => setOpen(false)} title="Volver al proyecto">
+              <ArrowLeft size={15} />
+              <span>Volver</span>
+            </button>
+          )}
           <AppIcon className="brand-mark lg" />
           <div>
             <span className="library-eyebrow">NovelCraft</span>
@@ -385,11 +397,6 @@ export function ProjectManager() {
             <Plus size={14} />
             Nueva novela
           </button>
-          {canClose && (
-            <button className="icon-btn library-close" onClick={() => setOpen(false)} title="Cerrar biblioteca">
-              <X size={18} />
-            </button>
-          )}
           {appInfo?.platform !== 'darwin' && (
             <div className="window-controls library-window-controls">
               <button className="window-control" onClick={() => window.novelcraft.minimizeWindow()} title="Minimizar">
@@ -469,6 +476,10 @@ export function ProjectManager() {
       </div>
 
       <footer className="library-footer">
+        <button type="button" className="library-settings-button" onClick={() => setSettingsOpen(true)}>
+          <Settings size={14} />
+          Ajustes
+        </button>
         <span><Check size={11} />Guardado local y privado</span>
         <span className="grow" />
         {project && <span className="faint">Proyecto abierto: {project.title}</span>}

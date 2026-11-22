@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeTheme, shell } from 'electron'
 import { join } from 'node:path'
-import type { AiProvider, AiRequest, AppSettings, CoverGenerateRequest, Project } from '../shared/types'
+import type { AiProvider, AiRequest, AppSettings, CoverGenerateRequest, ImageGenerateRequest, Project } from '../shared/types'
 import {
   createBackup,
   createExitBackup,
@@ -21,7 +21,7 @@ import {
   saveProject
 } from './projects'
 import { cancelAiRequest, aiComplete, discoverModels, streamAiChat, testAiProvider } from './ai'
-import { generateCoverImage } from './imagegen'
+import { generateCoverImage, generateImage } from './imagegen'
 import { exportManuscript } from './exporter'
 import { getBaseDir, ensureBaseDirs } from './storage'
 import { getSettings, saveSettings } from './settings'
@@ -110,6 +110,7 @@ function registerIpc(): void {
   )
   ipcMain.handle('ai:cancel', (_event, requestId: string) => cancelAiRequest(requestId))
   ipcMain.handle('ai:generate-cover', (_event, request: CoverGenerateRequest) => generateCoverImage(request))
+  ipcMain.handle('ai:generate-image', (_event, request: ImageGenerateRequest) => generateImage(request))
   ipcMain.handle('export:manuscript', (_event, payload: Parameters<typeof exportManuscript>[0]) =>
     exportManuscript(payload)
   )
@@ -188,19 +189,21 @@ function createWindow(): void {
     }
   })
 
+  
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    // DevTools disabled - use F12 manually if needed
     modernizeWindow()
     void getSettings()
-      .then((settings) => {
-        const scale = settings.general.uiScale || 100
-        if (Number.isFinite(scale) && scale !== 100) {
-          mainWindow?.webContents.setZoomFactor(Math.min(2, Math.max(0.5, scale / 100)))
-        }
-      })
-      .catch(() => undefined)
+    .then((settings) => {
+      const scale = settings.general.uiScale || 100
+      if (Number.isFinite(scale) && scale !== 100) {
+        mainWindow?.webContents.setZoomFactor(Math.min(2, Math.max(0.5, scale / 100)))
+      }
+    })
+    .catch(() => undefined)
   })
-
+  
   mainWindow.on('close', (event) => {
     if (allowClose) return
     if (!mainWindow) return

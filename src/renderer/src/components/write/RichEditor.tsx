@@ -11,8 +11,9 @@ import Underline from '@tiptap/extension-underline'
 import Typography from '@tiptap/extension-typography'
 import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style'
 import type { Editor } from '@tiptap/react'
-import type { DocumentNode } from '@shared/types'
+import type { DocumentNode, EntityKind, ID } from '@shared/types'
 import { AI_ACTION_PROMPTS, buildProjectContext, countWords, type AiActionMeta } from '@shared/project'
+import { getAiSkillPrompt } from '@shared/aiSkills'
 import {
   AlignCenter,
   AlignJustify,
@@ -38,7 +39,8 @@ import {
   Sparkles,
   Strikethrough,
   Underline as UnderlineIcon,
-  Undo2
+  Undo2,
+  UsersRound
 } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import { ContextMenu, type ContextMenuItem } from '../ui/ContextMenu'
@@ -73,9 +75,11 @@ export function RichEditor({ node, content, editable = true, onChange, onAiReque
   const spellcheck = useAppStore((state) => state.settings.editor.spellcheck)
   const fontSize = useAppStore((state) => state.settings.editor.fontSize)
   const aiEnabled = useAppStore((state) => state.settings.ai.enabled)
+  const pushToast = useAppStore((state) => state.pushToast)
   const linkOpenInitially = false
   const [linkOpen, setLinkOpen] = useState(linkOpenInitially)
   const [linkUrl, setLinkUrl] = useState('')
+  const [entityLink, setEntityLink] = useState('')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
   const updateTimer = useRef<number | null>(null)
 
@@ -87,7 +91,30 @@ export function RichEditor({ node, content, editable = true, onChange, onAiReque
         heading: { levels: [1, 2, 3] }
       }),
       Underline,
-      Link.configure({
+      Link.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            entityKind: {
+              default: null,
+              parseHTML: (element) => element.getAttribute('data-entity-kind'),
+              renderHTML: (attributes) => attributes.entityKind ? { 'data-entity-kind': attributes.entityKind } : {}
+            },
+            entityId: {
+              default: null,
+              parseHTML: (element) => element.getAttribute('data-entity-id'),
+              renderHTML: (attributes) => attributes.entityId ? { 'data-entity-id': attributes.entityId } : {}
+            }
+          }
+        },
+        addCommands() {
+          return {
+            ...this.parent?.(),
+            setEntityLink: (attributes: { href: string; entityKind?: EntityKind | null; entityId?: ID | null }) =>
+              ({ chain }) => chain().setLink({ href: attributes.href }).setMark('link', attributes).run()
+          }
+        }
+      }).configure({
         openOnClick: false,
         autolink: true,
         linkOnPaste: true,
@@ -180,19 +207,91 @@ export function RichEditor({ node, content, editable = true, onChange, onAiReque
 
   const openLinkDialog = (): void => {
     if (!editor) return
-    setLinkUrl(editor.getAttributes('link').href || '')
+    const attrs = editor.getAttributes('link')
+    setLinkUrl(attrs.entityKind && attrs.entityId ? '' : attrs.href || '')
+    setEntityLink(attrs.entityKind && attrs.entityId ? `${attrs.entityKind}:${attrs.entityId}` : '')
     setLinkOpen(true)
   }
 
   const applyLink = (): void => {
     if (!editor) return
     const url = linkUrl.trim()
-    if (url) {
-      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+    const [kind, ...idParts] = entityLink.split(':')
+    const id = idParts.join(':')
+    const validKind = kind === 'character' || kind === 'location' || kind === 'item'
+    const project = useAppStore.getState().project
+    const collection = kind === 'character' ? project?.characters : kind === 'location' ? project?.locations : kind === 'item' ? project?.items : undefined
+    if (validKind && id && collection?.some((entity) => entity.id === id)) {
+      editor.chain().focus().extendMarkRange('link').setEntityLink({
+        href: `novelcraft://entity/${kind}/${encodeURIComponent(id)}`,
+        entityKind: kind satisfies EntityKind,
+        entityId: id satisfies ID
+      }).run()
+    } else if (url) {
+      editor.chain().focus().extendMarkRange('link').setEntityLink({ href: url, entityKind: null, entityId: null }).run()
     } else {
       editor.chain().focus().extendMarkRange('link').unsetLink().run()
     }
     setLinkOpen(false)
+  }
+
+  const linkEntityMentions = (): void => {
+    if (!editor) return
+    const project = useAppStore.getState().project
+    if (!project) return
+    const entities = [
+      ...project.characters.map((entity) => ({ kind: 'character' as const, id: entity.id, name: entity.name.trim() })),
+      ...project.locations.map((entity) => ({ kind: 'location' as const, id: entity.id, name: entity.name.trim() })),
+      ...project.items.map((entity) => ({ kind: 'item' as const, id: entity.id, name: entity.name.trim() }))
+    ].filter((entity) => entity.name.length > 0)
+    const nameCounts = new Map<string, number>()
+    for (const entity of entities) {
+      const key = entity.name.toLocaleLowerCase()
+      nameCounts.set(key, (nameCounts.get(key) || 0) + 1)
+    }
+    const ambiguousNameCount = [...nameCounts.values()].filter((count) => count > 1).length
+    const candidates = entities
+      .filter((entity) => nameCounts.get(entity.name.toLocaleLowerCase()) === 1)
+      .sort((a, b) => b.name.length - a.name.length)
+    const linkMark = editor.state.schema.marks.link
+    if (!linkMark) return
+    const transaction = editor.state.tr
+    let linkedCount = 0
+
+    editor.state.doc.descendants((textNode, position) => {
+      const text = textNode.text
+      if (!textNode.isText || typeof text !== 'string' || textNode.marks.some((mark) => mark.type === linkMark)) return
+      const occupied = new Array<boolean>(text.length).fill(false)
+      for (const entity of candidates) {
+        const escapedName = entity.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const matcher = new RegExp(`(?<![\\p{L}\\p{N}_])${escapedName}(?![\\p{L}\\p{N}_])`, 'giu')
+        for (const match of text.matchAll(matcher)) {
+          const start = match.index
+          const end = start + match[0].length
+          if (occupied.slice(start, end).some(Boolean)) continue
+          occupied.fill(true, start, end)
+          transaction.addMark(
+            position + start,
+            position + end,
+            linkMark.create({
+              href: `novelcraft://entity/${entity.kind}/${encodeURIComponent(entity.id)}`,
+              entityKind: entity.kind,
+              entityId: entity.id,
+              rel: 'noopener noreferrer'
+            })
+          )
+          linkedCount += 1
+        }
+      }
+    })
+
+    if (transaction.docChanged) editor.view.dispatch(transaction)
+    pushToast(
+      `${linkedCount
+        ? `${linkedCount} ${linkedCount === 1 ? 'mención vinculada' : 'menciones vinculadas'} al Códex.`
+        : 'No se encontraron menciones nuevas sin enlazar.'}${ambiguousNameCount ? ` Se omitieron ${ambiguousNameCount} ${ambiguousNameCount === 1 ? 'nombre duplicado' : 'nombres duplicados'} para evitar enlaces ambiguos.` : ''}`,
+      linkedCount ? 'success' : 'info'
+    )
   }
 
   const clearFormatting = (): void => {
@@ -359,6 +458,9 @@ export function RichEditor({ node, content, editable = true, onChange, onAiReque
           <button className={`toolbar-btn ${toolbar?.link ? 'active' : ''}`} onClick={openLinkDialog} title="Enlace">
             <Link2 size={14} />
           </button>
+          <button className="toolbar-btn" onClick={linkEntityMentions} disabled={!editable} title="Vincular menciones del Códex" aria-label="Vincular menciones del Códex">
+            <UsersRound size={14} />
+          </button>
           <button className="toolbar-btn" onClick={clearFormatting} title="Borrar formato">
             <RemoveFormatting size={14} />
           </button>
@@ -402,6 +504,18 @@ export function RichEditor({ node, content, editable = true, onChange, onAiReque
           event.preventDefault()
           setContextMenu({ x: event.clientX, y: event.clientY })
         }}
+        onClick={(event) => {
+          const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[data-entity-kind][data-entity-id]')
+          if (!anchor) return
+          const kind = anchor.dataset.entityKind
+          const id = anchor.dataset.entityId
+          if (!id || (kind !== 'character' && kind !== 'location' && kind !== 'item')) return
+          event.preventDefault()
+          const project = useAppStore.getState().project
+          const entities = kind === 'character' ? project?.characters : kind === 'location' ? project?.locations : project?.items
+          if (!entities?.some((entity) => entity.id === id)) return
+          useAppStore.getState().selectEntity(kind, id)
+        }}
       >
         <EditorContent editor={editor} />
       </div>
@@ -428,12 +542,34 @@ export function RichEditor({ node, content, editable = true, onChange, onAiReque
         }
       >
         <div className="field">
+          <label className="field-label" htmlFor="editor-entity-link">Registro del códice (opcional)</label>
+          <select
+            id="editor-entity-link"
+            className="input"
+            value={entityLink}
+            onChange={(event) => setEntityLink(event.target.value)}
+          >
+            <option value="">Enlace web</option>
+            {(['character', 'location', 'item'] as const).map((kind) => {
+              const project = useAppStore.getState().project
+              const entities = kind === 'character' ? project?.characters : kind === 'location' ? project?.locations : project?.items
+              const label = kind === 'character' ? 'Characters' : kind === 'location' ? 'Locations' : 'Items'
+              return entities?.length ? (
+                <optgroup key={kind} label={label}>
+                  {entities.map((entity) => <option key={entity.id} value={`${kind}:${entity.id}`}>{entity.name}</option>)}
+                </optgroup>
+              ) : null
+            })}
+          </select>
+        </div>
+        <div className="field">
           <label className="field-label">Dirección web</label>
           <input
             className="input"
             value={linkUrl}
             onChange={(event) => setLinkUrl(event.target.value)}
             placeholder="https://..."
+            disabled={Boolean(entityLink)}
             autoFocus
             onKeyDown={(event) => {
               if (event.key === 'Enter') applyLink()
@@ -494,8 +630,7 @@ export function AiActionDialog({
       const instruction = extraInstruction.trim()
         ? `${baseInstruction}\n\nINDICACIONES ADICIONALES DEL AUTOR:\n${extraInstruction.trim()}`
         : baseInstruction
-      const system =
-        'Eres un asistente editorial experto en narrativa de ficción. Trabajas dentro del proyecto de novela del usuario y respetas su voz, sus personajes y su canon. Responde en el idioma del proyecto. No inventes hechos incompatibles con el contexto.'
+      const system = `${getAiSkillPrompt('editorial-action')}\n\nIDIOMA DE RESPUESTA: ${project.language}`
       const user = `CONTEXTO DEL PROYECTO:\n${context}\n\nFRAGMENTO:\n"""${text || '(sin selección)'}"""\n\nINSTRUCCIÓN:\n${instruction}`
       const response = await window.novelcraft.aiComplete({
         providerId: provider.id,

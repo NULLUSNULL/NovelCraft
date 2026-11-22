@@ -1,12 +1,14 @@
-import { BookOpen, Feather, Network, Settings, UsersRound } from 'lucide-react'
+import { BookOpen, Feather, Image, Network, Settings, UsersRound } from 'lucide-react'
 import type { AppView } from '@shared/types'
 import { useAppStore } from '../store/useAppStore'
 
-const NAV_ITEMS: Array<{ view: AppView; label: string; icon: typeof Feather }> = [
+const NAV_ITEMS: Array<{ view: AppView; label: string; icon: React.ElementType }> = [
   { view: 'write', label: 'Manuscrito', icon: Feather },
   { view: 'codex', label: 'Codex', icon: UsersRound },
   { view: 'plots', label: 'Tramas', icon: Network },
-  { view: 'publish', label: 'Publicar', icon: BookOpen }
+  { view: 'publish', label: 'Publicar', icon: BookOpen },
+  { view: 'images', label: 'Imágenes', icon: Image },
+  { view: 'guide', label: 'Guía de Escritura', icon: BookOpen }
 ]
 
 export function Rail() {
