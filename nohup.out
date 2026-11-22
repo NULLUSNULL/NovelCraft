@@ -1,0 +1,1 @@
+bash: line 1: 113569 Hangup                  ./node_modules/.bin/tsc --noEmit -p tsconfig.web.json --composite false > /home/satanejo/Programas/NovelCraft/NovelCraft/tc_web.txt 2>&1
