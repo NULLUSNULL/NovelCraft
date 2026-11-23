@@ -3321,6 +3321,88 @@ kbd {
   margin-top: 12px;
 }
 
+.writing-guide-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.writing-guide-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.writing-guide-checkbox {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.writing-guide-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.writing-guide-item-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writing-guide-item-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 10.5px;
+  color: var(--muted);
+  line-height: 1.35;
+  -webkit-line-clamp: 1;
+}
+
+.writing-guide-point-editable {
+  cursor: text;
+}
+
+.writing-guide-point-input {
+  background: var(--input-bg, transparent);
+  border: 1px solid var(--input-border, #333);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: var(--text);
+  font-size: inherit;
+  min-width: 60px;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.writing-guide-item.checked .writing-guide-item-title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* El flotante de la guía de escena es una tarjeta oscura: el texto del checklist contrasta con su fondo */
+.scene-guide-body .writing-guide-item-title {
+  color: var(--foreground, #fff);
+}
+
+.scene-guide-body .writing-guide-item-desc {
+  color: var(--muted-foreground, #a1a1aa);
+}
+
+.scene-guide-body .writing-guide-point-input {
+  color: var(--foreground, #fff);
+}
+
 .inspector-chapter-link {
   width: 100%;
   display: flex;

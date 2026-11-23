@@ -3,11 +3,11 @@ import {
   ArrowRight,
   BookOpen,
   CalendarDays,
+  CheckSquare,
   FileText,
   MapPin,
   NotebookPen,
   Sparkles,
-  Target,
   UserRound,
   X
 } from 'lucide-react'
@@ -22,6 +22,7 @@ import { useAppStore } from '../store/useAppStore'
 import { AiAssistant } from './AiAssistant'
 import { ColorPicker, Field, MultiSelect, TagInput } from './ui/Form'
 import { Switch } from './ui/Modal'
+import { WritingGuideInspector } from './write/WritingGuideInspector'
 
 function InspectorSection({ title, children, icon }: { title: string; children: React.ReactNode; icon?: React.ReactNode }) {
   return (
@@ -146,24 +147,6 @@ function SceneInspector({ node }: { node: DocumentNode }) {
             placeholder="Vincular ítems"
             compact
           />
-        </Field>
-      </InspectorSection>
-
-      <InspectorSection title="Tensión dramática" icon={<Target size={13} />}>
-        <Field label="Objetivo de la escena">
-          <textarea className="textarea sm" value={node.goal} onChange={(event) => updateNode(node.id, { goal: event.target.value })} rows={2} placeholder="Qué busca el personaje" />
-        </Field>
-        <Field label="Conflicto">
-          <textarea className="textarea sm" value={node.conflict} onChange={(event) => updateNode(node.id, { conflict: event.target.value })} rows={2} placeholder="Qué se opone" />
-        </Field>
-        <Field label="Resultado">
-          <textarea className="textarea sm" value={node.outcome} onChange={(event) => updateNode(node.id, { outcome: event.target.value })} rows={2} placeholder="Qué cambia al final" />
-        </Field>
-        <Field label="Tensión dramática">
-          <textarea className="textarea sm" value={node.dramaticTension || ''} onChange={(event) => updateNode(node.id, { dramaticTension: event.target.value })} rows={2} placeholder="Qué aumenta la tensión y qué está en riesgo" />
-        </Field>
-        <Field label="Esquema de escritura">
-          <textarea className="textarea sm" value={node.writingPlan || ''} onChange={(event) => updateNode(node.id, { writingPlan: event.target.value })} rows={4} placeholder="Pasos o beats para desarrollar la escena" />
         </Field>
       </InspectorSection>
 
@@ -326,6 +309,10 @@ export function Inspector() {
               <Sparkles size={12} />
               Asistente
             </button>
+            <button className={activeTab === 'guide' ? 'active' : ''} onClick={() => setInspectorTab('guide')}>
+              <CheckSquare size={12} />
+              Guía de Escritura
+            </button>
           </div>
         ) : (
           <div className="inspector-standalone-title">
@@ -340,7 +327,9 @@ export function Inspector() {
         </button>
       </div>
 
-      {activeTab === 'ai' ? (
+      {activeTab === 'guide' ? (
+        <WritingGuideInspector />
+      ) : activeTab === 'ai' ? (
         <AiAssistant />
       ) : !node ? (
         <div className="inspector-scroll">

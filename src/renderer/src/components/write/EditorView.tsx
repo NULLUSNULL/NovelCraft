@@ -27,6 +27,7 @@ import {
 } from '@shared/project'
 import { useAppStore } from '../../store/useAppStore'
 import { AiActionDialog, RichEditor } from './RichEditor'
+import { WritingGuideChecklist } from './WritingGuideChecklist'
 
 interface AiInvocation {
   action: string
@@ -387,6 +388,10 @@ function SceneGuideFloat({
             </div>
           </div>
           <div className="scene-guide-body">
+            <div className="guide-field">
+              <label className="guide-label">Puntos de escritura</label>
+              <WritingGuideChecklist />
+            </div>
             <div className="guide-field">
               <label className="guide-label">Tensión dramática</label>
               <textarea

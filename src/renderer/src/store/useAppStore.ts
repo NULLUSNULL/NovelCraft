@@ -55,7 +55,7 @@ export interface SelectedEntity {
   id: ID
 }
 
-export type InspectorTab = 'scene' | 'ai'
+export type InspectorTab = 'scene' | 'ai' | 'guide'
 export type SettingsSection = 'general' | 'editor' | 'ai' | 'backups' | 'about'
 
 interface AppState {

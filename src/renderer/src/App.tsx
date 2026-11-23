@@ -17,7 +17,6 @@ import { CodexView } from './components/codex/CodexView'
 import { PlotsView } from './components/plots/PlotsView'
 import { PublishView } from './components/publish/PublishView'
 import { ImageStudioView } from './components/images/ImageStudioView'
-import { WritingGuideView } from './components/write/WritingGuideView'
 import { ProjectManager } from './components/project/ProjectManager'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { CommandPalette } from './components/commands/CommandPalette'
@@ -137,7 +136,6 @@ export default function App() {
                 {view === 'plots' && <PlotsView />}
                 {view === 'publish' && <PublishView />}
                 {view === 'images' && <ImageStudioView />}
-                {view === 'guide' && <WritingGuideView />}
               </div>
             )}
           </div>

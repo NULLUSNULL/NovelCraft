@@ -8,7 +8,6 @@ const NAV_ITEMS: Array<{ view: AppView; label: string; icon: React.ElementType }
   { view: 'plots', label: 'Tramas', icon: Network },
   { view: 'publish', label: 'Publicar', icon: BookOpen },
   { view: 'images', label: 'Imágenes', icon: Image },
-  { view: 'guide', label: 'Guía de Escritura', icon: BookOpen }
 ]
 
 export function Rail() {
