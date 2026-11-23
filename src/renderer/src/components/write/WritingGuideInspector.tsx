@@ -1,8 +1,9 @@
-import { CheckSquare, Target } from 'lucide-react'
+import { CheckSquare, Sparkles, Target } from 'lucide-react'
 import { useAppStore } from '../../store/useAppStore'
 import type { DocumentNode } from '@shared/types'
 import { Field } from '../ui/Form'
 import { WritingGuideChecklist } from './WritingGuideChecklist'
+import { useWritingGuidePoints } from './writingGuideState'
 
 function TensionSection({ node }: { node: DocumentNode }) {
   const updateNode = useAppStore((state) => state.updateNode)
@@ -68,8 +69,18 @@ export function WritingGuideInspector() {
   const selectedDocumentId = useAppStore((state) => state.selectedDocumentId)
   const node = project && selectedDocumentId ? project.nodes[selectedDocumentId] : undefined
   const isScene = node?.type === 'scene'
+  const writingPlan = isScene && node ? node.writingPlan || '' : ''
+  const { items } = useWritingGuidePoints(writingPlan)
+  const setInspectorTab = useAppStore((state) => state.setInspectorTab)
   return (
     <div className="inspector-scroll">
+      {items.length === 0 && (
+        <div className="inspector-guide-button">
+          <button className="btn sm" onClick={() => setInspectorTab('ai')}>
+            <Sparkles size={13} /> Inspirar con IA
+          </button>
+        </div>
+      )}
       {isScene && node ? (
         <TensionSection node={node} />
       ) : (

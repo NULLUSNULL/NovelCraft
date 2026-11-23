@@ -3,6 +3,22 @@ import { useAppStore } from '../../store/useAppStore'
 import type { DocumentNode } from '@shared/types'
 import { useWritingGuidePoints, type WritingGuideItem } from './writingGuideState'
 
+type MatchedEntity = { kind: 'character' | 'location' | 'item'; id: string }
+
+function matchEntity(project: ReturnType<typeof useAppStore.getState>['project'], title: string): MatchedEntity | null {
+  const text = title.toLowerCase()
+  for (const character of project?.characters || []) {
+    if (character.name && text.includes(character.name.toLowerCase())) return { kind: 'character', id: character.id }
+  }
+  for (const location of project?.locations || []) {
+    if (location.name && text.includes(location.name.toLowerCase())) return { kind: 'location', id: location.id }
+  }
+  for (const worldItem of project?.items || []) {
+    if (worldItem.name && text.includes(worldItem.name.toLowerCase())) return { kind: 'item', id: worldItem.id }
+  }
+  return null
+}
+
 function EditableText({
   value,
   onCommit,
@@ -56,12 +72,16 @@ function EditableText({
 
 function WritingGuidePoint({
   item,
+  match,
   onCommit,
-  onChecked
+  onChecked,
+  selectEntity
 }: {
   item: WritingGuideItem
+  match: MatchedEntity | null
   onCommit: (patch: Partial<WritingGuideItem>) => void
   onChecked: () => void
+  selectEntity: (match: MatchedEntity) => void
 }) {
   return (
     <div className={`writing-guide-item ${item.checked ? 'checked' : ''}`}>
@@ -73,11 +93,24 @@ function WritingGuidePoint({
         title={item.description}
       />
       <span className="writing-guide-item-body">
-        <EditableText
-          value={item.title}
-          onCommit={(title) => onCommit({ title })}
-          className="writing-guide-item-title"
-        />
+        {match ? (
+          <a
+            className="writing-guide-link"
+            title={item.description || item.title}
+            onClick={(event) => {
+              event.stopPropagation()
+              selectEntity(match)
+            }}
+          >
+            {item.title}
+          </a>
+        ) : (
+          <EditableText
+            value={item.title}
+            onCommit={(title) => onCommit({ title })}
+            className="writing-guide-item-title"
+          />
+        )}
         <EditableText
           value={item.description}
           onCommit={(description) => onCommit({ description })}
@@ -89,8 +122,10 @@ function WritingGuidePoint({
 }
 
 export function WritingGuideChecklist() {
+  const project = useAppStore((state) => state.project)
   const node = useAppStore((state) => state.project?.nodes[state.selectedDocumentId])
   const updateNode = useAppStore((state) => state.updateNode)
+  const openEntity = useAppStore((state) => state.selectEntity)
   const writingPlan = node?.type === 'scene' ? node.writingPlan || '' : ''
   const { items, toggle } = useWritingGuidePoints(writingPlan)
   if (!node || node.type !== 'scene') return null
@@ -99,14 +134,19 @@ export function WritingGuideChecklist() {
   }
   return (
     <div className="writing-guide-items">
-      {items.map((item) => (
-        <WritingGuidePoint
-          key={item.id}
-          item={item}
-          onChecked={() => toggle(item)}
-          onCommit={(patch) => writeBack(items.map((entry) => (entry.id === item.id ? { ...entry, ...patch } : entry)))}
-        />
-      ))}
+      {items.map((item) => {
+        const match = matchEntity(project, item.title)
+        return (
+          <WritingGuidePoint
+            key={item.id}
+            item={item}
+            match={match}
+            onChecked={() => toggle(item)}
+            onCommit={(patch) => writeBack(items.map((entry) => (entry.id === item.id ? { ...entry, ...patch } : entry)))}
+            selectEntity={(m) => openEntity(m.kind, m.id)}
+          />
+        )
+      })}
       {!items.length && (
         <p className="form-empty-text">
           El esquema de escritura está vacío. Escribe una idea por línea en el campo «Esquema de escritura» o pide al asistente un plan de la escena.

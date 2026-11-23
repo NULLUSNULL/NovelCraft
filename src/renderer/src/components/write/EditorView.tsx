@@ -460,19 +460,6 @@ function SceneGuideFloat({
           <Menu size={14} />
         </button>
       )}
-      {state === 'hidden' && (
-        <button
-          type="button"
-          className="scene-guide-restore"
-          onClick={(e) => {
-            e.stopPropagation()
-            saveState('open')
-          }}
-          title="Mostrar guía de escena"
-        >
-          <Menu size={10} />
-        </button>
-      )}
     </div>
   )
 }

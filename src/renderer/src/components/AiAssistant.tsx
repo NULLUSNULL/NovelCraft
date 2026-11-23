@@ -23,7 +23,11 @@ type SceneProposal = Partial<Pick<
   DocumentNode,
   'pov' | 'locationId' | 'characterIds' | 'plotIds' | 'itemIds' |
   'goal' | 'conflict' | 'outcome' | 'dramaticTension' | 'writingPlan'
->>
+>> & {
+  newCharacters?: Array<{ title: string; description?: string }>
+  newPlaces?: Array<{ title: string }>
+  newItems?: Array<{ title: string }>
+}
 
 interface ChatMessage {
   id: string
@@ -35,6 +39,7 @@ interface ChatMessage {
   sceneTitle?: string
   sceneProposal?: SceneProposal
   proposalApplied?: boolean
+  isInspiration?: boolean
 }
 
 const SUGGESTIONS = [
@@ -127,11 +132,30 @@ function extractSceneProposal(content: string): { content: string; proposal?: Sc
         proposal[field] = source[field].filter((item): item is string => typeof item === 'string')
       }
     }
+    const entityFields = ['newCharacters', 'newPlaces', 'newItems'] as const
+    for (const field of entityFields) {
+      if (Array.isArray(source[field])) {
+        const entries = source[field].filter(
+          (item): item is { title: string; description?: string } => isRecord(item) && typeof item.title === 'string'
+        )
+        if (entries.length) proposal[field] = entries
+      }
+    }
     if (!Object.keys(proposal).length) return { content }
     return { content: content.replace(marker, '').trim(), proposal }
   } catch {
     return { content }
   }
+}
+
+function parseIdeas(content: string): string[] {
+  return content
+    .replace(/;\s*(?=\d+[.)]\s)/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => /^\d+[.)]\s+/.test(line))
+    .map((line) => line.replace(/^\d+[.)]\s+/, '').trim())
+    .filter(Boolean)
 }
 
 export function AiAssistant() {
@@ -238,7 +262,7 @@ export function AiAssistant() {
     }
   }, [])
 
-  const send = async (text?: string): Promise<void> => {
+  const send = async (text?: string, inspiration = false): Promise<void> => {
     const content = (text ?? draft).trim()
     if (!content || !project || !provider || streaming || loadedStorageKey !== storageKey) return
     const id = `ai_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
@@ -253,7 +277,8 @@ export function AiAssistant() {
       role: 'assistant',
       content: '',
       createdAt: new Date().toISOString(),
-      ...(selectedNode?.type === 'scene' ? { sceneId: selectedNode.id, sceneTitle: selectedNode.title } : {})
+      ...(selectedNode?.type === 'scene' ? { sceneId: selectedNode.id, sceneTitle: selectedNode.title } : {}),
+      ...(inspiration ? { isInspiration: true } : {})
     }
     const conversation = [...messagesRef.current, userMessage].filter((message) => !message.error)
     setMessages([...messagesRef.current, userMessage, assistantMessage])
@@ -268,7 +293,7 @@ export function AiAssistant() {
         .join('\n')
         .slice(-4000)
       const scenePlanInstruction = selectedNode?.type === 'scene'
-        ? `\n\n${getAiSkillPrompt('scene-planning')}`
+        ? `\n\n${getAiSkillPrompt('scene-planning')}\n\n${getAiSkillPrompt('inspiración-literaria')}`
         : ''
       const historyContext = previousHistory
         ? `\n\nMEMORIA BREVE DE MENSAJES ANTERIORES:\n${previousHistory}\nÚsala para mantener continuidad, pero da prioridad a la petición actual y al canon del proyecto.`
@@ -317,6 +342,11 @@ export function AiAssistant() {
     void send(`Prepara un plan de escritura para la escena «${selectedNode.title}». Analiza el contexto y propón, cuando tenga sentido, el punto de vista, la ubicación, los personajes, las tramas y los ítems relevantes, además de la tensión dramática, el objetivo, el conflicto, el resultado y un esquema breve de desarrollo. No inventes hechos del canon.`)
   }
 
+  const inspire = (): void => {
+    if (selectedNode?.type !== 'scene') return
+    void send(`Analiza el contexto y propón una inspiración literaria para la escena activa «${selectedNode.title}»: 2–4 ideas concretas y distintas que surjan del personaje, del conflicto actual y del tema. Para cada idea, di en una línea qué apuesta narrativa hace y pon un esquema ejecutable por beats (objetivo, conflicto, resultado). Identifica los elementos relevantes — punto de vista, ubicación, personajes, tramas y ítems — solo con IDs existentes del contexto, y las conexiones entre tramas y personajes. Al final añade el bloque <NOVELCRAFT_SCENE_PLAN> con el JSON propuesto. No inventes hechos del canon.`, true)
+  }
+
   const applySceneProposal = (message: ChatMessage): void => {
     if (!project || !message.sceneId || !message.sceneProposal) return
     const scene = project.nodes[message.sceneId]
@@ -326,6 +356,48 @@ export function AiAssistant() {
     }
     const proposal = message.sceneProposal
     const patch: Partial<DocumentNode> = {}
+    const createdCharacterIds: string[] = []
+    for (const entry of proposal.newCharacters || []) {
+      if (!entry.title) continue
+      const existing = project.characters.find((c) => c.name.toLowerCase() === entry.title.toLowerCase())
+      if (existing) { createdCharacterIds.push(existing.id); continue }
+      const before = new Set(useAppStore.getState().project?.characters.map((c) => c.id) || [])
+      useAppStore.getState().addCharacter()
+      const created = (useAppStore.getState().project?.characters || []).find((c) => !before.has(c.id))
+      if (created) {
+        useAppStore.getState().updateCharacter(created.id, { name: entry.title })
+        createdCharacterIds.push(created.id)
+      }
+    }
+    if (createdCharacterIds.length) patch.characterIds = [...(patch.characterIds || []), ...createdCharacterIds]
+    const createdPlaceIds: string[] = []
+    for (const entry of proposal.newPlaces || []) {
+      if (!entry.title) continue
+      const existing = project.locations.find((l) => l.name.toLowerCase() === entry.title.toLowerCase())
+      if (existing) { createdPlaceIds.push(existing.id); continue }
+      const before = new Set(useAppStore.getState().project?.locations.map((l) => l.id) || [])
+      useAppStore.getState().addLocation()
+      const created = (useAppStore.getState().project?.locations || []).find((l) => !before.has(l.id))
+      if (created) {
+        useAppStore.getState().updateLocation(created.id, { name: entry.title, type: created.type })
+        createdPlaceIds.push(created.id)
+      }
+    }
+    if (createdPlaceIds.length) patch.locationId = patch.locationId || createdPlaceIds[0]
+    const createdItemIds: string[] = []
+    for (const entry of proposal.newItems || []) {
+      if (!entry.title) continue
+      const existing = project.items.find((i) => i.name.toLowerCase() === entry.title.toLowerCase())
+      if (existing) { createdItemIds.push(existing.id); continue }
+      const before = new Set(useAppStore.getState().project?.items.map((i) => i.id) || [])
+      useAppStore.getState().addItem()
+      const created = (useAppStore.getState().project?.items || []).find((i) => !before.has(i.id))
+      if (created) {
+        useAppStore.getState().updateItem(created.id, { name: entry.title })
+        createdItemIds.push(created.id)
+      }
+    }
+    if (createdItemIds.length) patch.itemIds = [...(patch.itemIds || []), ...createdItemIds]
     const skippedAssociations: string[] = []
     if (typeof proposal.pov === 'string') {
       if (!proposal.pov || project.characters.some((character) => character.id === proposal.pov)) patch.pov = proposal.pov
@@ -457,7 +529,7 @@ export function AiAssistant() {
               <div className="chat-text">
                 {message.content ? <MessageText text={message.content} /> : <span className="chat-placeholder">Pensando con el contexto de tu novela...</span>}
               </div>
-              {message.sceneProposal && message.sceneId && (
+              {message.sceneProposal && message.sceneId && !message.isInspiration && (
                 <div className="ai-scene-proposal">
                   <div className="ai-scene-proposal-title">
                     <FileText size={13} />
@@ -493,6 +565,19 @@ export function AiAssistant() {
                   {copiedId === message.id ? 'Copiado' : 'Copiar'}
                 </button>
               )}
+              {message.isInspiration && parseIdeas(message.content).length > 0 && (
+                <div className="ai-idea-buttons">
+                  {parseIdeas(message.content).map((idea, index) => (
+                    <button
+                      key={index}
+                      className="btn sm"
+                      onClick={() => void send(`Aplica esta idea: ${idea}`)}
+                    >
+                      {idea.slice(0, 72)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -500,10 +585,16 @@ export function AiAssistant() {
 
       <div className="ai-composer">
         {selectedNode?.type === 'scene' && (
-          <button className="ai-scene-plan-trigger" onClick={planScene} disabled={!provider || streaming}>
-            <WandSparkles size={13} />
-            Preparar plan de escena
-          </button>
+          <>
+            <button className="ai-scene-plan-trigger" onClick={inspire} disabled={!provider || streaming}>
+              <WandSparkles size={13} />
+              Inspirar
+            </button>
+            <button className="ai-scene-plan-trigger" onClick={planScene} disabled={!provider || streaming}>
+              <WandSparkles size={13} />
+              Preparar plan de escena
+            </button>
+          </>
         )}
         {!provider && (
           <div className="ai-provider-warning">

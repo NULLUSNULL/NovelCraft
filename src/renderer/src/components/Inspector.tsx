@@ -40,6 +40,7 @@ function SceneInspector({ node }: { node: DocumentNode }) {
   const project = useAppStore((state) => state.project)
   const updateNode = useAppStore((state) => state.updateNode)
   const selectDocument = useAppStore((state) => state.selectDocument)
+  const setInspectorTab = useAppStore((state) => state.setInspectorTab)
   if (!project) return null
   const chapter = project.nodes[node.parentId]
   const characterOptions = project.characters.map((character) => ({
@@ -69,6 +70,13 @@ function SceneInspector({ node }: { node: DocumentNode }) {
 
   return (
     <div className="inspector-scroll">
+      {[node.goal, node.conflict, node.outcome].some((v) => !v) && (
+        <div className="inspector-guide-button">
+          <button className="btn sm" onClick={() => setInspectorTab('ai')}>
+            <Sparkles size={13} /> Inspirar con IA
+          </button>
+        </div>
+      )}
       <InspectorSection title="Metadatos de escena" icon={<FileText size={13} />}>
         <Field label="Estado">
           <div className="status-pills">

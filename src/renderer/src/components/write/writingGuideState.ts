@@ -39,8 +39,15 @@ function writeCheckedMap(map: Record<string, boolean>): void {
 export function parseEsquemaPoints(writingPlan: string): WritingGuideItem[] {
   const seen = new Set<string>()
   const items: WritingGuideItem[] = []
-  for (const beat of writingPlan.split(/\r?\n/)) {
-    const text = beat.trim().replace(/^[-*•·]\s+/, '').trim()
+  const normalized = writingPlan
+    .replace(/([;,])\s*(?=\d+[.)]\s)/g, '\n')
+    .replace(/([;,])\s*(?=[-*•·]\s)/g, '\n')
+  for (const line of normalized.split(/\r?\n/)) {
+    const text = line
+      .trim()
+      .replace(/^[-*•·]\s+/, '')
+      .replace(/^\d+[.)]\s+/, '')
+      .trim()
     if (!text || seen.has(text)) continue
     seen.add(text)
     items.push({ id: text, title: text.slice(0, 90), description: text, checked: false })

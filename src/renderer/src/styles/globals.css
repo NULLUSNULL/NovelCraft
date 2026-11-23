@@ -3390,6 +3390,36 @@ kbd {
   opacity: 0.6;
 }
 
+.writing-guide-link {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--accent-bright);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.writing-guide-link:hover {
+  color: var(--accent);
+}
+
+.inspector-guide-button {
+  padding: 0 0 8px;
+}
+
+.ai-idea-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
+.ai-idea-buttons button {
+  text-align: left;
+  font-weight: 500;
+  color: var(--on-surface, var(--text));
+  font-size: 12px;
+}
+
 /* El flotante de la guía de escena es una tarjeta oscura: el texto del checklist contrasta con su fondo */
 .scene-guide-body .writing-guide-item-title {
   color: var(--foreground, #fff);
@@ -12415,12 +12445,7 @@ button.doc-meta-chip:hover {
   width: max-content;
 }
 
-.scene-guide-float[data-state="hidden"] .scene-guide-restore {
-  display: flex;
-}
-
-.scene-guide-float[data-state="hidden"] .scene-guide-panel,
-.scene-guide-float[data-state="hidden"] .scene-guide-minimized {
+.scene-guide-float[data-state="hidden"] .scene-guide-panel {
   display: none;
 }
 
@@ -12528,27 +12553,6 @@ button.doc-meta-chip:hover {
 .scene-guide-minimized:hover {
   filter: brightness(1.15);
   transform: scale(1.05);
-}
-
-.scene-guide-restore {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  background: var(--card-bg, #1f1f23);
-  border: 1px solid var(--border, #333);
-  color: var(--muted-foreground, #a1a1aa);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-}
-
-.scene-guide-restore:hover {
-  background: var(--card-hover, #2a2a30);
-  color: var(--foreground, #fff);
-  border-color: var(--primary, #6366f1);
 }
 
 .doc-header-actions .btn-active {
